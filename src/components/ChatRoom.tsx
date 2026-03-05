@@ -1,12 +1,41 @@
-import React, { useState, useRef, useEffect, Suspense } from 'react';
-import { Send, Play, Loader2, Check, X, Bot, User, Trash2, Save, FolderOpen, Star } from 'lucide-react';
+import * as React from 'react';
+import { Component, useState, useRef, useEffect, Suspense } from 'react';
+import { Send, Play, Loader2, Check, X, Bot, User, Trash2, Save, FolderOpen } from 'lucide-react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { parseWenMoTianJiToJSON } from '../utils/ziweiParser';
 import { generateNativeChart } from '../utils/nativeChartGenerator';
 import { extractAndSaveMemory } from '../utils/memoryExtractor';
+import { astro } from 'iztro'; // 用于计算时间轴
 
-// 强制使用懒加载，防止沙盒首次全量编译时内存崩溃
-const Iztrolabe = React.lazy(() => import('react-iztro').then(module => ({ default: module.Iztrolabe })));
+// --- 🛡️ 防白屏核心：错误边界组件 ---
+class ErrorBoundary extends React.Component<any, any> {
+  constructor(props: any) {
+    super(props);
+    // @ts-ignore
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(error: any, info: any) { console.error("星盘组件崩溃:", error, info); }
+  render() { 
+    // @ts-ignore
+    if (this.state.hasError) return this.props.fallback;
+    // @ts-ignore
+    return this.props.children;
+  }
+}
+
+// --- 组件懒加载 (带容错) ---
+const Iztrolabe = React.lazy(async () => {
+  try {
+    const module = await import('react-iztro');
+    const Comp = module.Iztrolabe || module.default || (module as any).default?.Iztrolabe;
+    if (!Comp) throw new Error("未找到Iztrolabe导出");
+    return { default: Comp };
+  } catch (e) {
+    console.error("加载失败:", e);
+    return { default: () => <div className="text-red-500 p-4">组件加载失败</div> };
+  }
+});
 
 interface Message {
   id: string;
@@ -45,6 +74,10 @@ export default function ChatRoom() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [activeChartText, setActiveChartText] = useLocalStorage<string | null>('ziwei_active_chart', null);
   
+  // ✅ 新增：时间机器状态
+  const [focusDate, setFocusDate] = useState<Date>(new Date());
+  const [selectedDecadeIndex, setSelectedDecadeIndex] = useState<number>(-1);
+  
   // Extraction state
   const [isExtracting, setIsExtracting] = useState(false);
   const [pendingFuel, setPendingFuel] = useState<ExtractedFuel | null>(null);
@@ -56,6 +89,65 @@ export default function ChatRoom() {
 
   // Memories state
   const [memories, setMemories] = useLocalStorage<ChartMemory[]>('ziwei_memories', []);
+
+  // 🕒 时间机器渲染函数 (使用 astro 核心算法)
+  const renderTimeMachine = () => {
+    if (!activeChartText) return null;
+    try {
+      let chartObj;
+      try {
+         let clean = activeChartText.trim();
+         if (!clean.startsWith('{')) clean = clean.match(/\{[\s\S]*\}/)?.[0] || '';
+         chartObj = JSON.parse(clean);
+      } catch(e) { return null; }
+      if (!chartObj?.rawParams) return null;
+
+      // 使用 astro 计算大限列表
+      const astrolabe = astro.bySolar(chartObj.rawParams.birthday, chartObj.rawParams.birthTime, chartObj.rawParams.gender, true, 'zh-CN');
+      const decades = astrolabe.palaces.map((p, idx) => ({ ...p.decadal, palaceIndex: idx, name: p.name })).sort((a,b) => a.range[0] - b.range[0]);
+      
+      const birthYear = new Date(chartObj.rawParams.birthday).getFullYear();
+      const currentYear = focusDate.getFullYear();
+
+      return (
+        <div className="bg-zinc-950 border-t border-zinc-800 p-3 flex flex-col gap-2 animate-in slide-in-from-bottom-4">
+          <div className="flex justify-between text-xs text-emerald-400 font-mono">
+            <span>⏳ 时空穿梭机</span>
+            <span>当前: {currentYear}年</span>
+          </div>
+          {/* 大限轨道 */}
+          <div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
+            {decades.map((d, idx) => {
+              const start = birthYear + d.range[0] - 1;
+              const end = birthYear + d.range[1] - 1;
+              const isActive = currentYear >= start && currentYear <= end;
+              return (
+                <button key={idx} 
+                  onClick={() => { setSelectedDecadeIndex(idx); setFocusDate(new Date(start, 0, 1)); }}
+                  className={`px-3 py-1 rounded border text-xs min-w-[70px] ${isActive ? 'border-emerald-500 bg-emerald-900/30 text-emerald-400' : 'border-zinc-800 text-zinc-500'}`}>
+                  <div>{d.range[0]}-{d.range[1]}岁</div><div className="scale-75">{d.name}限</div>
+                </button>
+              );
+            })}
+          </div>
+          {/* 流年轨道 */}
+          <div className="grid grid-cols-10 gap-1">
+             {(() => {
+               const activeIdx = selectedDecadeIndex === -1 ? decades.findIndex(d => currentYear >= (birthYear + d.range[0]-1) && currentYear <= (birthYear + d.range[1]-1)) : selectedDecadeIndex;
+               const d = decades[activeIdx];
+               if(!d) return null;
+               return Array.from({length:10}, (_,i) => birthYear + d.range[0] - 1 + i).map(y => (
+                 <button key={y} onClick={() => setFocusDate(new Date(y, 0, 1))}
+                   className={`h-8 rounded text-[10px] border flex items-center justify-center ${y === currentYear ? 'bg-emerald-600 text-white' : 'bg-zinc-900 text-zinc-500 border-zinc-800'}`}>
+                   {y}
+                 </button>
+               ));
+             })()}
+          </div>
+        </div>
+      );
+    } catch (e) { console.error("TimeMachine Error:", e); return null; }
+  };
 
   const [fuels, setFuels] = useLocalStorage<any[]>('ziwei_fuels', []);
   const [activeRule] = useLocalStorage<any>('ziwei_active_rule', null);
@@ -107,7 +199,7 @@ export default function ChatRoom() {
     const model = apiSettings.model.trim() || 'deepseek-chat';
 
     try {
-      let systemPrompt = "你是一个名为'紫微多维共振引擎'的顶尖命理 AI。请严格遵守以下交互原则：\n\n1. 区分场景：如果用户只是闲聊、打招呼或测试（未提供排盘数据），请用简短、自然、拟人化的语气回应，**绝对不要**虚构示例命盘去长篇大论。\n2. 隐式推理（核心）：当你收到用户的排盘文本时，你必须在后台默默执行多宫联动、体用校验、同气提取等复杂计算，但**绝对禁止**将推演步骤（如'第一步看命宫'、'多维共振网络'等思考过程）输出给用户。\n3. 输出风格：直接输出最终的精炼结论。打破宿命论，多谈象意、变数与破局方向。语气要像一位深谙世事、通透豁达且极具人文关怀的智者，言辞精炼，留有余地，不要像一个正在汇报步骤的机器人。\n\n【最高推演算法：全息三点定位法】\n面对用户的任何提问（无论是财运、感情、健康、人际还是置产），你绝对禁止只盯着对应的单一宫位看！你必须在后台自动执行以下【三点连线推理】，并将推理结果融合到你的回答中：\n\n📍 第一点：找【表象与工具】（当前事态的宫位）\n用户问什么事，就定位该事的主宫位（如问感情找夫妻宫，问钱找财帛宫，问病找疾厄宫）。分析该宫位星曜代表的表面状态、处理手段或客观境遇。\n\n📍 第二点：找【内核与基因】（命、福、身的交叉核对）\n这是最重要的一步！强制回头核对【命宫】（先天性格与格局）、【福德宫】（精神潜意识与执念）或【身宫】（后天归宿）。\n你必须向用户解释：【表象】之所以会发生，是因为你的【内核基因】决定了你会这样去选择和应对。例如：不是因为夫妻宫不好所以婚姻差，而是因为你福德宫的执念或命宫的性格，导致你必然会被夫妻宫那种特质的人吸引并产生摩擦。\n\n📍 第三点：找【外部刺激与暗礁】（对宫与暗合的拉扯）\n查看当前主宫位的【对宫】（冲）。对宫永远代表外部环境的刺激、出路或致命的破坏力。必须指出内外环境的矛盾或统一。\n\n【强制话术结构】：你的每一次深度解析，逻辑链条必须是：『你的内在核心特质是（第二点） -> 所以你在面对这个问题时，展现出的手段和遭遇是（第一点） -> 但需要注意外部环境或深层隐患带来的拉扯（第三点）』。不要生硬地罗列步骤，要将其写成通透、连贯的人文解析。";
+      let systemPrompt = "你是一个名为'紫微多维共振引擎'的顶尖命理 AI。请严格遵守以下交互原则：\n\n1. 区分场景：如果用户只是闲聊、打招呼或测试（未提供排盘数据），请用简短、自然、拟人化的语气回应，**绝对不要**虚构示例命盘去长篇大论。\n2. 隐式推理（核心）：当你收到用户的排盘文本时，你必须在后台默默执行多宫联动、体用校验、同气提取等复杂计算，但**绝对禁止**将推演步骤（如'第一步看命宫'、'多维共振网络'等思考过程）输出给用户。\n3. 输出风格：直接输出最终的精炼结论。打破宿命论，多谈象意、变数与破局方向。语气要像一位深谙世事、通透豁达且极具人文关怀的智者，言辞精炼，留有余地，不要像一个正在汇报步骤的机器人。\n\n【三代四化全息推演】：你收到的数据包含 original (原局), decade (大限), year (流年) 三代四化。在解盘时，必须将这三层能量重叠分析。原局是基因，大限是环境，流年是触发。重点分析流年四化如何引动大限 and 原局的结构。\n\n【最高推演算法：全息三点定位法】\n面对用户的任何提问（无论是财运、感情、健康、人际还是置产），你绝对禁止只盯着对应的单一宫位看！你必须在后台自动执行以下【三点连线推理】，并将推理结果融合到你的回答中：\n\n📍 第一点：找【表象与工具】（当前事态的宫位）\n用户问什么事，就定位该事的主宫位（如问感情找夫妻宫，问钱找财帛宫，问病找疾厄宫）。分析该宫位星曜代表的表面状态、处理手段或客观境遇。\n\n📍 第二点：找【内核与基因】（命、福、身的交叉核对）\n这是最重要的一步！强制回头核对【命宫】（先天性格与格局）、【福德宫】（精神潜意识与执念）或【身宫】（后天归宿）。\n你必须向用户解释：【表象】之所以会发生，是因为你的【内核基因】决定了你会这样去选择和应对。例如：不是因为夫妻宫不好所以婚姻差，而是因为你福德宫的执念或命宫的性格，导致你必然会被夫妻宫那种特质的人吸引并产生摩擦。\n\n📍 第三点：找【外部刺激与暗礁】（对宫与暗合的拉扯）\n查看当前主宫位的【对宫】（冲）。对宫永远代表外部环境的刺激、出路或致命的破坏力。必须指出内外环境的矛盾或统一。\n\n【强制话术结构】：你的每一次深度解析，逻辑链条必须是：『你的内在核心特质是（第二点） -> 所以你在面对这个问题时，展现出的手段和遭遇是（第一点） -> 但需要注意外部环境或深层隐患带来的拉扯（第三点）』。不要生硬地罗列步骤，要将其写成通透、连贯的人文解析。";
 
       if (activeRule && activeRule.steps) {
         const stepsText = activeRule.steps.map((s: any) => `${s.title}\n${s.description}`).join('\n\n');
@@ -404,36 +496,16 @@ export default function ChatRoom() {
   };
 
   const handleGenerateNativeChart = () => {
-    if (!nativeDate) {
-      alert("⚠️ 请选择出生日期！");
-      return;
-    }
-
+    if (!nativeDate) { alert("请选择日期"); return; }
+    // 调用新的排盘器
     const chartData = generateNativeChart(nativeDate, nativeTime, nativeGender);
-    if (!chartData) {
-      alert("❌ 排盘失败，请检查输入！");
-      return;
-    }
-
-    const finalContent = JSON.stringify(chartData, null, 2);
-
-    // 1. 【核心交互】直接更新当前锁定命盘的状态，左侧星盘将瞬间自动渲染！
-    setActiveChartText(finalContent);
-
-    // 2. 自动静默保存到命盘库，免去用户手动起名的繁琐步骤
-    try {
-      const formattedDate = nativeDate.replace(/-/g, '/');
-      const autoName = `[原生] ${formattedDate} ${nativeTime}`;
-      const stored = localStorage.getItem('ziwei_cases');
-      let oldCases = stored ? JSON.parse(stored) : [];
-      if (!Array.isArray(oldCases)) oldCases = [];
-
-      const newCases = [...oldCases, { id: Date.now().toString(), name: autoName, content: finalContent, createdAt: Date.now() }];
-      localStorage.setItem('ziwei_cases', JSON.stringify(newCases));
-      setCases(newCases);
-    } catch (error) {
-      console.error("自动保存命盘失败:", error);
-    }
+    if (!chartData) { alert("排盘失败"); return; }
+    const json = JSON.stringify(chartData, null, 2);
+    setActiveChartText(json); // 存入
+    // 自动保存逻辑...
+    const name = `[原生] ${nativeDate} ${nativeTime}`;
+    const newCases = [...cases, { id: Date.now().toString(), name, content: json, createdAt: Date.now() }];
+    setCases(newCases);
   };
 
   const handleToggleCaseSelection = (caseId: string) => {
@@ -483,62 +555,48 @@ export default function ChatRoom() {
   return (
     <div className="flex flex-col xl:flex-row gap-4 h-full w-full overflow-y-auto xl:overflow-hidden p-4 max-w-[1600px] mx-auto relative">
       {/* Left Pane: Astrolabe */}
-      <div className="w-full xl:w-1/2 flex-shrink-0 bg-gray-50 dark:bg-gray-900 rounded-lg shadow-inner overflow-auto flex justify-center items-start pt-4 min-h-[500px] xl:min-h-0 border border-zinc-800 relative">
-        {(() => {
-          // 1. 空状态：根本没有选中任何盘
-          if (!activeChartText) {
-            return (
-              <div className="w-full h-full flex flex-col items-center justify-center text-zinc-500 min-h-[500px] gap-4 p-8 text-center">
-                <span className="text-4xl mb-4">🌌</span>
-                <p>请在右侧输入生辰生成命盘，或从命盘库中选择</p>
+      <div className="w-full xl:w-1/2 bg-gray-50 dark:bg-gray-900 rounded-lg shadow-inner overflow-hidden flex flex-col border border-zinc-800">
+        <div className="flex-1 overflow-auto flex justify-center items-start pt-4 relative min-h-[400px]">
+          {activeChartText ? (
+            <ErrorBoundary fallback={
+              <div className="flex flex-col items-center justify-center h-full text-red-500 gap-2">
+                <span>⚠️ 星盘组件渲染出错</span>
+                <span className="text-xs text-zinc-500">（可能是版本兼容问题，但不影响右侧AI解盘）</span>
               </div>
-            );
-          }
-
-          // 2. 尝试安全解析 JSON
-          let activeChartObj = null;
-          try {
-            let cleanText = activeChartText;
-            // 兼容带有上下文提示前缀的情况
-            if (!cleanText.trim().startsWith('{')) {
-              // 如果不是以 { 开头，尝试强制截取第一段 JSON
-              const match = cleanText.match(/\{[\s\S]*\}/);
-              if (match) cleanText = match[0];
-            }
-            activeChartObj = JSON.parse(cleanText);
-          } catch (e) {
-            console.error("解析命盘JSON失败:", e);
-            return (
-              <div className="w-full h-full flex items-center justify-center text-zinc-500 min-h-[500px]">
-                命盘数据解析失败
-              </div>
-            );
-          }
-
-          // 3. 解析成功，但发现是文墨天机“文本导入”的旧盘，缺少 rawParams
-          if (!activeChartObj || !activeChartObj.rawParams) {
-            return (
-              <div className="w-full h-full flex items-center justify-center text-zinc-500 min-h-[500px]">
-                当前命盘不支持互动展示
-              </div>
-            );
-          }
-
-          // 4. 完美状态：渲染互动星盘
-          return (
-            <Suspense fallback={<div className="text-emerald-500 animate-pulse font-bold mt-20">🌌 正在加载高精度互动星盘...</div>}>
-              {/* 利用 transform 确保星盘能完整缩放放入容器中 */}
-              <div className="transform scale-75 sm:scale-90 md:scale-100 origin-top pb-10">
-                <Iztrolabe 
-                  birthday={activeChartObj.rawParams.birthday}
-                  birthTime={activeChartObj.rawParams.birthTime}
-                  birthdayType={activeChartObj.rawParams.birthdayType}
-                  gender={activeChartObj.rawParams.gender}
-                />
-              </div>
-            </Suspense>
-          );
-        })()}
+            }>
+              <Suspense fallback={<div className="text-emerald-500 p-10">加载星盘中...</div>}>
+                 {(() => {
+                    try {
+                      let clean = activeChartText;
+                      if (!clean.startsWith('{')) clean = clean.match(/\{[\s\S]*\}/)?.[0] || '{}';
+                      const obj = JSON.parse(clean);
+                      if (!obj.rawParams) return <div className="p-10 text-zinc-500">非原生数据，不支持互动显示</div>;
+                      
+                      return (
+                        <div className="transform scale-90 origin-top">
+                          <Iztrolabe 
+                            birthday={obj.rawParams.birthday}
+                            birthTime={obj.rawParams.birthTime}
+                            birthdayType={obj.rawParams.birthdayType}
+                            gender={obj.rawParams.gender}
+                            horoscopeDate={focusDate} // 👈 关键：如果这里崩了，ErrorBoundary会兜底
+                            horoscopeHour={new Date().getHours()}
+                          />
+                        </div>
+                      );
+                    } catch(e) { return <div>数据解析错误</div> }
+                 })()}
+              </Suspense>
+            </ErrorBoundary>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full text-zinc-500">
+              <span className="text-4xl mb-4">🌌</span>
+              <p>请在右侧生成命盘</p>
+            </div>
+          )}
+        </div>
+        {/* 插入时间机器 */}
+        {renderTimeMachine()}
       </div>
 
       {/* Right Pane: Chat Interface */}
