@@ -1,0 +1,5 @@
+{
+  "name": "紫微多维共振引擎控制台",
+  "description": "用于动态导入、管理和迭代 AI 命理引擎的燃料、规则和模型的控制台界面。",
+  "requestFramePermissions": []
+}
