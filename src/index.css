@@ -1,77 +1,111 @@
 @import "tailwindcss";
 
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+  }
+  .dark {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+  }
+}
+
 /* =========================================
    紫微斗数排盘配色增强 (Ziwei Color Theme)
    ========================================= */
 
-/* --- 1. 星曜分类配色 --- */
+/* --- 1. 星曜分类配色 (Stars) --- */
 
 /* 主星 (Major Stars) -> 红色 */
-/* 如：紫微、天机、太阳... */
-.iztro-star-major {
+body .iztro-star-major {
   color: #DC2626 !important; /* Red-600 */
-  font-weight: bold;
+  font-weight: 700 !important;
 }
 
 /* 吉星/辅星 (Soft/Lucky Stars) -> 紫色 */
-/* 如：左辅、右弼、文昌、文曲... */
-.iztro-star-soft, 
-.iztro-star-good {
+body .iztro-star-soft, 
+body .iztro-star-good {
   color: #9333EA !important; /* Purple-600 */
+  font-weight: 600 !important;
 }
 
 /* 煞星 (Tough/Malefic Stars) -> 黑色 */
-/* 如：擎羊、陀罗、火星、铃星... */
-.iztro-star-tough, 
-.iztro-star-bad {
+body .iztro-star-tough, 
+body .iztro-star-bad {
   color: #000000 !important; /* Pure Black */
-  font-weight: 500;
+  font-weight: 600 !important;
+  /* 深色模式适配 */
+  @media (prefers-color-scheme: dark) {
+    color: #A1A1AA !important; /* Zinc-400 */
+  }
+}
+/* 强制深色模式 */
+.dark .iztro-star-tough, 
+.dark .iztro-star-bad {
+  color: #A1A1AA !important;
 }
 
-/* 杂曜/小星 (Adjective/Minor Stars) -> 蓝色 */
-/* 如：红鸾、天喜、孤辰、寡宿... */
-.iztro-star-adjective, 
-.iztro-star-minor {
+/* 杂曜/小星 -> 蓝色 */
+body .iztro-star-adjective, 
+body .iztro-star-minor {
   color: #2563EB !important; /* Blue-600 */
-  font-size: 0.9em;
+  font-size: 0.85em !important;
+  font-weight: 400 !important;
 }
 
 
 /* --- 2. 四化 (Mutagens) 层级配色 --- */
-/* 目标：原局红、大运绿、流年蓝 */
+/* 核心修复逻辑：默认全红，特定层级变色 */
 
-/* 通用四化样式微调 */
-.iztro-mutagen {
-  border-radius: 2px;
-  padding: 0 2px;
-  font-size: 0.85em;
-  margin-left: 2px;
-  color: white !important; /* 字体统一白色 */
-}
-
-/* 原局四化 (Original) -> 红色 */
-/* 这种类名取决于 react-iztro 的具体渲染，通常带有 scope 信息 */
-[class*="scope-origin"],
-.iztro-mutagen-origin {
-  background-color: #DC2626 !important; /* Red */
+/* 【原局四化 & 默认状态】 -> 统一红色 */
+/* 只要是四化，先给它上红色。这是原局的颜色。 */
+body .iztro-mutagen {
+  background-color: #DC2626 !important; /* Red-600 */
   border: 1px solid #DC2626 !important;
+  border-radius: 2px;
+  padding: 0 3px;
+  font-size: 0.8em;
+  margin-left: 3px;
+  color: white !important;
+  font-weight: normal !important;
+  display: inline-block;
+  line-height: 1.2;
 }
 
-/* 大限四化 (Decade) -> 绿色 */
-[class*="scope-decadal"],
-.iztro-mutagen-decadal {
-  background-color: #16A34A !important; /* Green */
+/* 【大限四化 (Decade)】 -> 覆盖为绿色 */
+/* 识别 data-scope="decadal" 或类名包含 decadal */
+body .iztro-mutagen[data-scope="decadal"],
+body .iztro-mutagen-decadal,
+body [class*="scope-decadal"] .iztro-mutagen {
+  background-color: #16A34A !important; /* Green-600 */
   border: 1px solid #16A34A !important;
 }
 
-/* 流年四化 (Yearly) -> 蓝色 */
-[class*="scope-yearly"],
-.iztro-mutagen-yearly {
-  background-color: #2563EB !important; /* Blue */
+/* 【流年四化 (Yearly)】 -> 覆盖为蓝色 */
+/* 识别 data-scope="yearly" 或类名包含 yearly */
+body .iztro-mutagen[data-scope="yearly"],
+body .iztro-mutagen-yearly,
+body [class*="scope-yearly"] .iztro-mutagen {
+  background-color: #2563EB !important; /* Blue-600 */
   border: 1px solid #2563EB !important;
 }
 
-/* 补充：针对流年流月的特殊标记 (如果组件支持) */
-[class*="scope-monthly"] {
-  background-color: #D97706 !important; /* Amber (流月用黄色区分) */
+/* 【流月四化 (Monthly)】 -> 覆盖为黄色 (预留) */
+body .iztro-mutagen[data-scope="monthly"],
+body .iztro-mutagen-monthly {
+  background-color: #D97706 !important; /* Amber-600 */
+  border: 1px solid #D97706 !important;
+}
+
+
+/* --- 3. 宫位高亮 --- */
+.iztro-palace-focused {
+  background-color: rgba(37, 99, 235, 0.1) !important;
+  border: 2px solid #2563EB !important;
 }
