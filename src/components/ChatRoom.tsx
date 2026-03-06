@@ -28,12 +28,14 @@ class ErrorBoundary extends React.Component<any, any> {
 const Iztrolabe = React.lazy(async () => {
   try {
     const module = await import('react-iztro');
+    // 兼容不同的导出方式，防止找不到组件
     const Comp = module.Iztrolabe || module.default || (module as any).default?.Iztrolabe;
     if (!Comp) throw new Error("未找到Iztrolabe导出");
     return { default: Comp };
   } catch (e) {
     console.error("加载失败:", e);
-    return { default: () => <div className="text-red-500 p-4">组件加载失败</div> };
+    // 返回一个占位组件，而不是让页面白屏
+    return { default: () => <div className="text-red-500 p-4 border border-red-500 rounded">组件加载失败，请检查依赖</div> };
   }
 });
 
@@ -102,7 +104,7 @@ export default function ChatRoom() {
       } catch(e) { return null; }
       if (!chartObj?.rawParams) return null;
 
-      // 使用 astro 计算大限列表
+      // 使用 astro 核心算法计算大限
       const astrolabe = astro.bySolar(chartObj.rawParams.birthday, chartObj.rawParams.birthTime, chartObj.rawParams.gender, true, 'zh-CN');
       const decades = astrolabe.palaces.map((p, idx) => ({ ...p.decadal, palaceIndex: idx, name: p.name })).sort((a,b) => a.range[0] - b.range[0]);
       
@@ -113,7 +115,7 @@ export default function ChatRoom() {
         <div className="bg-zinc-950 border-t border-zinc-800 p-3 flex flex-col gap-2 animate-in slide-in-from-bottom-4">
           <div className="flex justify-between text-xs text-emerald-400 font-mono">
             <span>⏳ 时空穿梭机</span>
-            <span>当前: {currentYear}年</span>
+            <span>当前推演: {currentYear}年</span>
           </div>
           {/* 大限轨道 */}
           <div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
@@ -124,7 +126,7 @@ export default function ChatRoom() {
               return (
                 <button key={idx} 
                   onClick={() => { setSelectedDecadeIndex(idx); setFocusDate(new Date(start, 0, 1)); }}
-                  className={`px-3 py-1 rounded border text-xs min-w-[70px] ${isActive ? 'border-emerald-500 bg-emerald-900/30 text-emerald-400' : 'border-zinc-800 text-zinc-500'}`}>
+                  className={`px-3 py-1 rounded border text-xs min-w-[70px] flex-shrink-0 ${isActive ? 'border-emerald-500 bg-emerald-900/30 text-emerald-400' : 'border-zinc-800 text-zinc-500'}`}>
                   <div>{d.range[0]}-{d.range[1]}岁</div><div className="scale-75">{d.name}限</div>
                 </button>
               );
@@ -553,49 +555,44 @@ export default function ChatRoom() {
   };
 
   return (
-    <div className="flex flex-col xl:flex-row gap-4 h-full w-full overflow-y-auto xl:overflow-hidden p-4 max-w-[1600px] mx-auto relative">
-      {/* Left Pane: Astrolabe */}
-      <div className="w-full xl:w-1/2 bg-gray-50 dark:bg-gray-900 rounded-lg shadow-inner overflow-hidden flex flex-col border border-zinc-800">
-        <div className="flex-1 overflow-auto flex justify-center items-start pt-4 relative min-h-[400px]">
+    <div className="flex flex-col xl:flex-row gap-4 h-full w-full overflow-hidden p-4 max-w-[1600px] mx-auto relative">
+      {/* 左侧面板 */}
+      <div className="w-full xl:w-1/2 flex-shrink-0 bg-gray-50 dark:bg-gray-900 rounded-lg shadow-inner overflow-hidden flex flex-col border border-zinc-800 relative">
+        <div className="flex-1 overflow-auto flex justify-center items-start pt-4 relative min-h-[500px] xl:min-h-0">
           {activeChartText ? (
-            <ErrorBoundary fallback={
-              <div className="flex flex-col items-center justify-center h-full text-red-500 gap-2">
-                <span>⚠️ 星盘组件渲染出错</span>
-                <span className="text-xs text-zinc-500">（可能是版本兼容问题，但不影响右侧AI解盘）</span>
-              </div>
-            }>
-              <Suspense fallback={<div className="text-emerald-500 p-10">加载星盘中...</div>}>
+            <ErrorBoundary fallback={<div className="p-8 text-red-500 text-center">星盘组件渲染出错，请检查控制台</div>}>
+              <Suspense fallback={<div className="text-emerald-500 p-20 flex items-center gap-2"><Loader2 className="animate-spin"/>加载中...</div>}>
                  {(() => {
                     try {
                       let clean = activeChartText;
                       if (!clean.startsWith('{')) clean = clean.match(/\{[\s\S]*\}/)?.[0] || '{}';
                       const obj = JSON.parse(clean);
-                      if (!obj.rawParams) return <div className="p-10 text-zinc-500">非原生数据，不支持互动显示</div>;
+                      if (!obj.rawParams) return <div className="p-10 text-zinc-500 text-center mt-20">文本导入的旧数据不支持互动，请使用原生排盘</div>;
                       
                       return (
-                        <div className="transform scale-90 origin-top">
+                        <div className="transform scale-90 origin-top pb-10">
                           <Iztrolabe 
                             birthday={obj.rawParams.birthday}
                             birthTime={obj.rawParams.birthTime}
                             birthdayType={obj.rawParams.birthdayType}
                             gender={obj.rawParams.gender}
-                            horoscopeDate={focusDate} // 👈 关键：如果这里崩了，ErrorBoundary会兜底
+                            horoscopeDate={focusDate} // ✅ 绑定状态，流年随时间轴变动
                             horoscopeHour={new Date().getHours()}
                           />
                         </div>
                       );
-                    } catch(e) { return <div>数据解析错误</div> }
+                    } catch(e) { return <div className="p-10 text-red-500">数据解析错误</div> }
                  })()}
               </Suspense>
             </ErrorBoundary>
           ) : (
-            <div className="flex flex-col items-center justify-center h-full text-zinc-500">
-              <span className="text-4xl mb-4">🌌</span>
-              <p>请在右侧生成命盘</p>
+            <div className="w-full h-full flex flex-col items-center justify-center text-zinc-500 gap-4">
+              <span className="text-4xl">🌌</span>
+              <p>请在右侧输入生辰</p>
             </div>
           )}
         </div>
-        {/* 插入时间机器 */}
+        {/* 插入时间机器面板 */}
         {renderTimeMachine()}
       </div>
 
