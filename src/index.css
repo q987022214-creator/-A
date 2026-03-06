@@ -20,77 +20,87 @@
    紫微斗数排盘配色增强 (Ziwei Color Theme)
    ========================================= */
 
-/* --- 1. 星曜分类配色 (Stars) --- */
-/* 使用 body 前缀增加权重，但不破坏布局 */
-
-/* 主星 (Major Stars) -> 红色 */
-body .iztro-star-major {
-  color: #DC2626 !important;
-  font-weight: 700 !important;
+/* --- 1. 强制显示四化 (Fix Missing Sihua) --- */
+/* 防止组件在容器狭窄时自动隐藏大限流年四化 */
+body .iztro-palace-mutagens,
+body [class*="mutagen-list"] {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  height: auto !important;
 }
 
-/* 吉星/辅星 (Soft/Lucky Stars) -> 紫色 */
-body .iztro-star-soft, 
-body .iztro-star-good {
-  color: #9333EA !important;
-  font-weight: 600 !important;
-}
+/* --- 2. 四化 (Mutagens) 颜色统一逻辑 --- */
+/* 逻辑：先给所有四化打底色（红色），然后抓“大限”和“流年”的特征词改色 */
 
-/* 煞星 (Tough/Malefic Stars) -> 黑色 */
-body .iztro-star-tough, 
-body .iztro-star-bad {
-  color: #000000 !important;
-  font-weight: 600 !important;
-}
-/* 深色模式适配 */
-@media (prefers-color-scheme: dark) {
-  body .iztro-star-tough, 
-  body .iztro-star-bad {
-    color: #A1A1AA !important;
-  }
-}
-.dark body .iztro-star-tough, 
-.dark body .iztro-star-bad {
-  color: #A1A1AA !important;
-}
-
-/* 杂曜/小星 -> 蓝色 */
-body .iztro-star-adjective, 
-body .iztro-star-minor {
-  color: #2563EB !important;
-  font-size: 0.85em !important;
-}
-
-
-/* --- 2. 四化 (Mutagens) 精准着色 --- */
-
-/* 【原局四化】 (默认状态) -> 红色 */
-/* 只要是四化，先给它上红色 */
-.iztro-mutagen {
-  background-color: #DC2626 !important;
+/* 【层级 0：底色 (原局)】 -> 红色 */
+/* 匹配所有包含 mutagen 的类名 */
+body [class*="mutagen"] {
+  background-color: #DC2626 !important; /* Red */
   border-color: #DC2626 !important;
-  color: white !important;
+  color: #fff !important;
+  border-radius: 2px;
+  padding: 0 2px;
+  font-size: 10px; 
+  line-height: 1.2;
 }
 
-/* 【大限四化】 -> 绿色 */
-/* 识别 data-scope="decadal" */
-.iztro-mutagen[data-scope="decadal"] {
-  background-color: #16A34A !important;
+/* 【层级 1：大限 (Decade)】 -> 绿色 */
+/* 匹配 data-scope="decadal" 或类名含 decadal */
+body [class*="mutagen"][data-scope="decadal"],
+body [class*="decadal"] [class*="mutagen"],
+body [class*="mutagen-decadal"] {
+  background-color: #16A34A !important; /* Green */
   border-color: #16A34A !important;
 }
 
-/* 【流年四化】 -> 蓝色 */
-/* 识别 data-scope="yearly" */
-.iztro-mutagen[data-scope="yearly"] {
-  background-color: #2563EB !important;
+/* 【层级 2：流年 (Yearly)】 -> 蓝色 */
+/* 匹配 data-scope="yearly" 或类名含 yearly */
+body [class*="mutagen"][data-scope="yearly"],
+body [class*="yearly"] [class*="mutagen"],
+body [class*="mutagen-yearly"] {
+  background-color: #2563EB !important; /* Blue */
   border-color: #2563EB !important;
 }
 
 
-/* --- 3. 强制显示四化 (关键修复) --- */
-/* 有时候组件会因为宽度不够隐藏四化，这里我们强制让宫位内的容器换行显示 */
-.iztro-palace-stars {
-  flex-wrap: wrap !important;
-  height: auto !important;
-  overflow: visible !important;
+/* --- 3. 星曜分类配色 (Stars) --- */
+
+/* 主星 (Major) -> 红色 */
+body [class*="star-major"] {
+  color: #DC2626 !important;
+  font-weight: 700 !important;
+}
+
+/* 吉星 (Soft/Good) -> 紫色 */
+body [class*="star-soft"],
+body [class*="star-good"] {
+  color: #9333EA !important;
+  font-weight: 600 !important;
+}
+
+/* 煞星 (Tough/Bad) -> 黑色 */
+body [class*="star-tough"],
+body [class*="star-bad"] {
+  color: #000000 !important;
+  font-weight: 600 !important;
+}
+/* 深色模式下的煞星 */
+.dark body [class*="star-tough"],
+.dark body [class*="star-bad"] {
+  color: #A1A1AA !important;
+}
+
+/* 杂曜 (Minor) -> 蓝色 */
+body [class*="star-minor"],
+body [class*="star-adjective"] {
+  color: #2563EB !important;
+  font-weight: 400 !important;
+}
+
+/* --- 4. 宫位高亮优化 --- */
+.iztro-palace-focused {
+  background-color: rgba(37, 99, 235, 0.05) !important;
+  border: 2px solid #2563EB !important;
 }
