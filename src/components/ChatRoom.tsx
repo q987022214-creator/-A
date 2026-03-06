@@ -576,7 +576,7 @@ export default function ChatRoom() {
                             birthTime={obj.rawParams.birthTime}
                             birthdayType={obj.rawParams.birthdayType}
                             gender={obj.rawParams.gender}
-                            horoscopeDate={focusDate} // ✅ 绑定状态，流年随时间轴变动
+                            horoscopeDate={focusDate || new Date()} // ✅ 绑定状态，流年随时间轴变动
                             horoscopeHour={new Date().getHours()}
                           />
                         </div>
