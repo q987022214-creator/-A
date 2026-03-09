@@ -92,101 +92,6 @@ export default function ChatRoom() {
   // Memories state
   const [memories, setMemories] = useLocalStorage<ChartMemory[]>('ziwei_memories', []);
 
-  // --- 🎯 新增：运限四化定位逻辑 ---
-  const chartContainerRef = useRef<HTMLDivElement>(null);
-  const [mutagenPositions, setMutagenPositions] = useState<{
-    star: string;
-    mutagen: string;
-    type: 'decadal' | 'yearly';
-    top: number;
-    left: number;
-  }[]>([]);
-
-  useEffect(() => {
-    if (!activeChartText || !chartContainerRef.current) {
-      setMutagenPositions([]);
-      return;
-    }
-
-    const updatePositions = () => {
-      const container = chartContainerRef.current;
-      if (!container) return;
-
-      const containerRect = container.getBoundingClientRect();
-      const tempPositions: any[] = [];
-      
-      let chartObj;
-      try {
-        let clean = activeChartText;
-        if (!clean.startsWith('{')) clean = clean.match(/\{[\s\S]*\}/)?.[0] || '{}';
-        chartObj = JSON.parse(clean);
-      } catch(e) { return; }
-      if (!chartObj.rawParams) return;
-
-      const astrolabe = astro.bySolar(chartObj.rawParams.birthday, chartObj.rawParams.birthTime, chartObj.rawParams.gender, true, 'zh-CN');
-      const horoscope = astrolabe.horoscope(focusDate);
-
-      const decadalMutagens = horoscope.decadal.mutagen.map((star, i) => ({ star, mutagen: ['禄', '权', '科', '忌'][i], type: 'decadal' as const })).filter(m => m.star);
-      const yearlyMutagens = horoscope.yearly.mutagen.map((star, i) => ({ star, mutagen: ['禄', '权', '科', '忌'][i], type: 'yearly' as const })).filter(m => m.star);
-
-      const allMutagens = [...decadalMutagens, ...yearlyMutagens];
-      
-      // 查找所有文本节点
-      const elements = Array.from(container.querySelectorAll('span, div, text')) as HTMLElement[];
-      
-      allMutagens.forEach(m => {
-        // 寻找匹配星名的元素
-        // 优先寻找在宫位区域内的（排除中心区域）
-        const starEl = elements.find(el => 
-          el.children.length === 0 && 
-          el.textContent?.trim() === m.star &&
-          el.getBoundingClientRect().width > 0 // 必须是可见的
-        );
-
-        if (starEl) {
-          const rect = starEl.getBoundingClientRect();
-          tempPositions.push({
-            star: m.star,
-            mutagen: m.mutagen,
-            type: m.type,
-            top: rect.top - containerRect.top,
-            left: rect.right - containerRect.left,
-          });
-        }
-      });
-
-      // 按星名分组处理并排显示
-      const grouped: Record<string, any[]> = {};
-      tempPositions.forEach(p => {
-        const key = `${p.star}-${p.top.toFixed(0)}`; // 加上坐标防止误判
-        if (!grouped[key]) grouped[key] = [];
-        grouped[key].push(p);
-      });
-
-      const finalPositions: any[] = [];
-      Object.values(grouped).forEach(group => {
-        group.forEach((p, i) => {
-          finalPositions.push({
-            ...p,
-            left: p.left + (i * 11) // 每个字偏移约11px
-          });
-        });
-      });
-
-      setMutagenPositions(finalPositions);
-    };
-
-    const timer = setTimeout(() => {
-      requestAnimationFrame(updatePositions);
-    }, 600); // 增加延迟确保 react-iztro 渲染完成
-
-    window.addEventListener('resize', updatePositions);
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener('resize', updatePositions);
-    };
-  }, [activeChartText, focusDate, selectedDecadeIndex]);
-
   // 🕒 时间机器渲染函数 (使用 astro 核心算法)
   const renderTimeMachine = () => {
     if (!activeChartText) return null;
@@ -688,40 +593,8 @@ export default function ChatRoom() {
                       
                       const iztroKey = `iztro-${selectedDecadeIndex}-${focusDate.getTime()}`;
                       
-                      // 手动计算运限数据以验证
-                      const astrolabe = astro.bySolar(obj.rawParams.birthday, obj.rawParams.birthTime, obj.rawParams.gender, true, 'zh-CN');
-                      const horoscope = astrolabe.horoscope(focusDate);
-                      
-                      // 提取大限四化落在哪个宫位
-                      // iztro v2 中 decadal.mutagen 是一个数组 [禄, 权, 科, 忌] 对应的星曜名
-                      const decadalMutagensInfo = horoscope.decadal.mutagen.map((starName, index) => {
-                        const mutagens = ['禄', '权', '科', '忌'];
-                        const palace = astrolabe.palaces.find(p => 
-                          p.majorStars.some(s => s.name === starName) || 
-                          p.minorStars.some(s => s.name === starName) ||
-                          p.adjectiveStars.some(s => s.name === starName)
-                        );
-                        return { star: starName, mutagen: mutagens[index], palaceIndex: palace?.index };
-                      }).filter(info => info.star); // 过滤掉空的星曜
-
-                      // 提取流年四化落在哪个宫位
-                      const yearlyMutagensInfo = horoscope.yearly.mutagen.map((starName, index) => {
-                        const mutagens = ['禄', '权', '科', '忌'];
-                        const palace = astrolabe.palaces.find(p => 
-                          p.majorStars.some(s => s.name === starName) || 
-                          p.minorStars.some(s => s.name === starName) ||
-                          p.adjectiveStars.some(s => s.name === starName)
-                        );
-                        return { star: starName, mutagen: mutagens[index], palaceIndex: palace?.index };
-                      }).filter(info => info.star);
-
-                      console.log("大限四化真实内容:", horoscope.decadal.mutagen);
-                      console.log("大限四化详细映射:", decadalMutagensInfo);
-                      console.log("流年四化真实内容:", horoscope.yearly.mutagen);
-                      console.log("流年四化详细映射:", yearlyMutagensInfo);
-
                       return (
-                        <div className="relative transform scale-90 origin-top pb-10" ref={chartContainerRef}>
+                        <div className="relative transform scale-90 origin-top pb-10">
                           <Iztrolabe 
                             key={iztroKey}
                             birthday={obj.rawParams.birthday}
@@ -731,24 +604,6 @@ export default function ChatRoom() {
                             horoscopeDate={focusDate} // ✅ 绑定状态，流年随时间轴变动
                             horoscopeHour={new Date().getHours()}
                           />
-                          
-                          {/* 业务层补渲染：大限 & 流年四化 (精准贴合星曜) */}
-                          {mutagenPositions.map((pos, i) => (
-                            <div 
-                              key={i}
-                              className={`absolute pointer-events-none font-bold select-none flex items-center justify-center transition-all duration-300`}
-                              style={{ 
-                                top: `${pos.top + 2}px`, 
-                                left: `${pos.left + 1}px`,
-                                fontSize: '10px',
-                                lineHeight: '1',
-                                color: pos.type === 'decadal' ? '#22c55e' : '#3b82f6', // 绿色(大运) : 蓝色(流年)
-                                textShadow: '0 0 1px rgba(0,0,0,0.5)'
-                              }}
-                            >
-                              {pos.mutagen}
-                            </div>
-                          ))}
                         </div>
                       );
                     } catch(e) { return <div className="p-10 text-red-500">数据解析错误</div> }
