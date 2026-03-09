@@ -92,6 +92,101 @@ export default function ChatRoom() {
   // Memories state
   const [memories, setMemories] = useLocalStorage<ChartMemory[]>('ziwei_memories', []);
 
+  // --- 🎯 新增：运限四化定位逻辑 ---
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const [mutagenPositions, setMutagenPositions] = useState<{
+    star: string;
+    mutagen: string;
+    type: 'decadal' | 'yearly';
+    top: number;
+    left: number;
+  }[]>([]);
+
+  useEffect(() => {
+    if (!activeChartText || !chartContainerRef.current) {
+      setMutagenPositions([]);
+      return;
+    }
+
+    const updatePositions = () => {
+      const container = chartContainerRef.current;
+      if (!container) return;
+
+      const containerRect = container.getBoundingClientRect();
+      const tempPositions: any[] = [];
+      
+      let chartObj;
+      try {
+        let clean = activeChartText;
+        if (!clean.startsWith('{')) clean = clean.match(/\{[\s\S]*\}/)?.[0] || '{}';
+        chartObj = JSON.parse(clean);
+      } catch(e) { return; }
+      if (!chartObj.rawParams) return;
+
+      const astrolabe = astro.bySolar(chartObj.rawParams.birthday, chartObj.rawParams.birthTime, chartObj.rawParams.gender, true, 'zh-CN');
+      const horoscope = astrolabe.horoscope(focusDate);
+
+      const decadalMutagens = horoscope.decadal.mutagen.map((star, i) => ({ star, mutagen: ['禄', '权', '科', '忌'][i], type: 'decadal' as const })).filter(m => m.star);
+      const yearlyMutagens = horoscope.yearly.mutagen.map((star, i) => ({ star, mutagen: ['禄', '权', '科', '忌'][i], type: 'yearly' as const })).filter(m => m.star);
+
+      const allMutagens = [...decadalMutagens, ...yearlyMutagens];
+      
+      // 查找所有文本节点
+      const elements = Array.from(container.querySelectorAll('span, div, text')) as HTMLElement[];
+      
+      allMutagens.forEach(m => {
+        // 寻找匹配星名的元素
+        // 优先寻找在宫位区域内的（排除中心区域）
+        const starEl = elements.find(el => 
+          el.children.length === 0 && 
+          el.textContent?.trim() === m.star &&
+          el.getBoundingClientRect().width > 0 // 必须是可见的
+        );
+
+        if (starEl) {
+          const rect = starEl.getBoundingClientRect();
+          tempPositions.push({
+            star: m.star,
+            mutagen: m.mutagen,
+            type: m.type,
+            top: rect.top - containerRect.top,
+            left: rect.right - containerRect.left,
+          });
+        }
+      });
+
+      // 按星名分组处理并排显示
+      const grouped: Record<string, any[]> = {};
+      tempPositions.forEach(p => {
+        const key = `${p.star}-${p.top.toFixed(0)}`; // 加上坐标防止误判
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push(p);
+      });
+
+      const finalPositions: any[] = [];
+      Object.values(grouped).forEach(group => {
+        group.forEach((p, i) => {
+          finalPositions.push({
+            ...p,
+            left: p.left + (i * 11) // 每个字偏移约11px
+          });
+        });
+      });
+
+      setMutagenPositions(finalPositions);
+    };
+
+    const timer = setTimeout(() => {
+      requestAnimationFrame(updatePositions);
+    }, 600); // 增加延迟确保 react-iztro 渲染完成
+
+    window.addEventListener('resize', updatePositions);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', updatePositions);
+    };
+  }, [activeChartText, focusDate, selectedDecadeIndex]);
+
   // 🕒 时间机器渲染函数 (使用 astro 核心算法)
   const renderTimeMachine = () => {
     if (!activeChartText) return null;
@@ -626,7 +721,7 @@ export default function ChatRoom() {
                       console.log("流年四化详细映射:", yearlyMutagensInfo);
 
                       return (
-                        <div className="relative transform scale-90 origin-top pb-10">
+                        <div className="relative transform scale-90 origin-top pb-10" ref={chartContainerRef}>
                           <Iztrolabe 
                             key={iztroKey}
                             birthday={obj.rawParams.birthday}
@@ -637,67 +732,23 @@ export default function ChatRoom() {
                             horoscopeHour={new Date().getHours()}
                           />
                           
-                          {/* 业务层补渲染：大限 & 流年四化 (精准定位到宫位) */}
-                          <div className="absolute inset-0 pointer-events-none grid grid-cols-4 grid-rows-4 gap-[3px]">
-                            {/* 大限四化 */}
-                            {decadalMutagensInfo.map((info, i) => {
-                              if (info.palaceIndex === undefined) return null;
-                              const gridAreas = ["g0", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8", "g9", "g10", "g11"];
-                              const area = gridAreas[info.palaceIndex];
-                              return (
-                                <div key={`decadal-${i}`} style={{ gridArea: area }} className="relative">
-                                  <div className="absolute top-1 right-1 flex flex-col items-end gap-1">
-                                    <div className={`text-[10px] px-1 rounded text-white font-bold shadow-sm ${
-                                      info.mutagen === '禄' ? 'bg-red-600' :
-                                      info.mutagen === '权' ? 'bg-blue-600' :
-                                      info.mutagen === '科' ? 'bg-emerald-600' :
-                                      'bg-zinc-700'
-                                    }`}>
-                                      运{info.mutagen}
-                                    </div>
-                                    <div className="text-[9px] text-zinc-400 bg-black/40 px-1 rounded">{info.star}</div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-
-                            {/* 流年四化 */}
-                            {yearlyMutagensInfo.map((info, i) => {
-                              if (info.palaceIndex === undefined) return null;
-                              const gridAreas = ["g0", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8", "g9", "g10", "g11"];
-                              const area = gridAreas[info.palaceIndex];
-                              return (
-                                <div key={`yearly-${i}`} style={{ gridArea: area }} className="relative">
-                                  <div className="absolute bottom-1 right-1 flex flex-col items-end gap-1">
-                                    <div className={`text-[10px] px-1 rounded text-white font-bold shadow-sm ${
-                                      info.mutagen === '禄' ? 'bg-orange-600' :
-                                      info.mutagen === '权' ? 'bg-cyan-600' :
-                                      info.mutagen === '科' ? 'bg-lime-600' :
-                                      'bg-zinc-500'
-                                    }`}>
-                                      流{info.mutagen}
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                            
-                            {/* 中心摘要 */}
-                            <div style={{ gridArea: 'ct' }} className="flex items-center justify-center">
-                              <div className="w-28 h-28 bg-zinc-950/60 backdrop-blur-sm border border-emerald-500/20 rounded-full flex flex-col items-center justify-center p-2">
-                                <div className="text-[10px] text-emerald-400 font-bold mb-1">运限四化</div>
-                                <div className="flex flex-wrap justify-center gap-x-2 gap-y-0.5">
-                                  {decadalMutagensInfo.map((info, i) => (
-                                    <span key={i} className="text-[9px] text-zinc-400">{info.star}运{info.mutagen}</span>
-                                  ))}
-                                  <div className="w-full border-t border-zinc-800 my-0.5"></div>
-                                  {yearlyMutagensInfo.map((info, i) => (
-                                    <span key={i} className="text-[9px] text-zinc-500">{info.star}流{info.mutagen}</span>
-                                  ))}
-                                </div>
-                              </div>
+                          {/* 业务层补渲染：大限 & 流年四化 (精准贴合星曜) */}
+                          {mutagenPositions.map((pos, i) => (
+                            <div 
+                              key={i}
+                              className={`absolute pointer-events-none font-bold select-none flex items-center justify-center transition-all duration-300`}
+                              style={{ 
+                                top: `${pos.top + 2}px`, 
+                                left: `${pos.left + 1}px`,
+                                fontSize: '10px',
+                                lineHeight: '1',
+                                color: pos.type === 'decadal' ? '#22c55e' : '#3b82f6', // 绿色(大运) : 蓝色(流年)
+                                textShadow: '0 0 1px rgba(0,0,0,0.5)'
+                              }}
+                            >
+                              {pos.mutagen}
                             </div>
-                          </div>
+                          ))}
                         </div>
                       );
                     } catch(e) { return <div className="p-10 text-red-500">数据解析错误</div> }
