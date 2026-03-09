@@ -7,99 +7,106 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
+    --background: 0 0% 100%; /* 白色背景 */
+    --foreground: 240 10% 3.9%; /* 深灰色文字 (几乎全黑) */
   }
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
+    --background: 240 10% 3.9%; /* 深色背景 */
+    --foreground: 0 0% 98%; /* 浅色文字 */
+  }
+
+  /* 【核心修复】强制 body 使用定义好的基础前景色 */
+  /* 这行代码能把界面从“全红”救回来 */
+  body {
+    @apply bg-background text-foreground;
   }
 }
 
 /* =========================================
-   紫微斗数排盘配色增强 (Ziwei Color Theme)
+   紫微斗数组件精准样式 (Ziwei Precision Styles)
    ========================================= */
 
-/* --- 1. 强制显示四化 (Fix Missing Sihua) --- */
-/* 防止组件在容器狭窄时自动隐藏大限流年四化 */
-body .iztro-palace-mutagens,
-body [class*="mutagen-list"] {
+/* --- 1. 强制显示四化容器 --- */
+.iztro-palace-mutagens {
   display: flex !important;
   flex-wrap: wrap !important;
   visibility: visible !important;
   opacity: 1 !important;
-  height: auto !important;
+  margin-top: 4px;
 }
 
-/* --- 2. 四化 (Mutagens) 颜色统一逻辑 --- */
-/* 逻辑：先给所有四化打底色（红色），然后抓“大限”和“流年”的特征词改色 */
+/* --- 2. 四化颜色 (Mutagens) --- */
+/* 只针对四化标签本身着色，背景色 and 边框色 */
 
-/* 【层级 0：底色 (原局)】 -> 红色 */
-/* 匹配所有包含 mutagen 的类名 */
-body [class*="mutagen"] {
-  background-color: #DC2626 !important; /* Red */
+/* 原局 (默认) -> 红底白字 */
+.iztro-mutagen {
+  background-color: #DC2626 !important;
   border-color: #DC2626 !important;
-  color: #fff !important;
+  color: white !important; /* 标签内的文字是白色 */
   border-radius: 2px;
   padding: 0 2px;
-  font-size: 10px; 
+  font-size: 10px !important;
+  margin: 1px !important;
   line-height: 1.2;
 }
 
-/* 【层级 1：大限 (Decade)】 -> 绿色 */
-/* 匹配 data-scope="decadal" 或类名含 decadal */
-body [class*="mutagen"][data-scope="decadal"],
-body [class*="decadal"] [class*="mutagen"],
-body [class*="mutagen-decadal"] {
-  background-color: #16A34A !important; /* Green */
+/* 大限 -> 绿底白字 */
+.iztro-mutagen[data-scope="decadal"] {
+  background-color: #16A34A !important;
   border-color: #16A34A !important;
 }
 
-/* 【层级 2：流年 (Yearly)】 -> 蓝色 */
-/* 匹配 data-scope="yearly" 或类名含 yearly */
-body [class*="mutagen"][data-scope="yearly"],
-body [class*="yearly"] [class*="mutagen"],
-body [class*="mutagen-yearly"] {
-  background-color: #2563EB !important; /* Blue */
+/* 流年 -> 蓝底白字 */
+.iztro-mutagen[data-scope="yearly"] {
+  background-color: #2563EB !important;
   border-color: #2563EB !important;
 }
 
 
-/* --- 3. 星曜分类配色 (Stars) --- */
+/* --- 3. 星曜文字颜色 (Stars Text Color) --- */
+/* 精准指定特定类名的文字颜色 */
 
-/* 主星 (Major) -> 红色 */
-body [class*="star-major"] {
+/* 主星 -> 红色加粗 */
+.iztro-star-major {
   color: #DC2626 !important;
-  font-weight: 700 !important;
+  font-weight: 800 !important;
 }
 
-/* 吉星 (Soft/Good) -> 紫色 */
-body [class*="star-soft"],
-body [class*="star-good"] {
+/* 吉星/辅星 -> 紫色 */
+.iztro-star-soft,
+.iztro-star-good {
   color: #9333EA !important;
   font-weight: 600 !important;
 }
 
-/* 煞星 (Tough/Bad) -> 黑色 */
-body [class*="star-tough"],
-body [class*="star-bad"] {
+/* 煞星 -> 黑色 (深色模式下变灰) */
+.iztro-star-tough,
+.iztro-star-bad {
   color: #000000 !important;
   font-weight: 600 !important;
 }
-/* 深色模式下的煞星 */
-.dark body [class*="star-tough"],
-.dark body [class*="star-bad"] {
+
+/* 杂曜 -> 蓝色 */
+.iztro-star-minor,
+.iztro-star-adjective {
+  color: #2563EB !important;
+  font-weight: 400 !important;
+  font-size: 0.85em !important;
+}
+
+/* 深色模式适配煞星颜色 */
+@media (prefers-color-scheme: dark) {
+  .iztro-star-tough,
+  .iztro-star-bad {
+    color: #A1A1AA !important; /* 浅灰色 */
+  }
+}
+.dark .iztro-star-tough,
+.dark .iztro-star-bad {
   color: #A1A1AA !important;
 }
 
-/* 杂曜 (Minor) -> 蓝色 */
-body [class*="star-minor"],
-body [class*="star-adjective"] {
-  color: #2563EB !important;
-  font-weight: 400 !important;
-}
-
-/* --- 4. 宫位高亮优化 --- */
+/* --- 4. 宫位高亮微调 --- */
 .iztro-palace-focused {
   background-color: rgba(37, 99, 235, 0.05) !important;
   border: 2px solid #2563EB !important;

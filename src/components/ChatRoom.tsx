@@ -108,8 +108,17 @@ export default function ChatRoom() {
       const astrolabe = astro.bySolar(chartObj.rawParams.birthday, chartObj.rawParams.birthTime, chartObj.rawParams.gender, true, 'zh-CN');
       const decades = astrolabe.palaces.map((p, idx) => ({ ...p.decadal, palaceIndex: idx, name: p.name })).sort((a,b) => a.range[0] - b.range[0]);
       
-      const birthYear = new Date(chartObj.rawParams.birthday).getFullYear();
+      // 核心：使用农历年作为基准年，以符合虚岁逻辑
+      const birthLunarYear = astrolabe.rawDates.lunarDate.lunarYear;
       const currentYear = focusDate.getFullYear();
+
+      const getYearGanZhi = (year: number) => {
+        const stems = "甲乙丙丁戊己庚辛壬癸";
+        const branches = "子丑寅卯辰巳午未申酉戌亥";
+        const stemIdx = (year - 4) % 10;
+        const branchIdx = (year - 4) % 12;
+        return stems[stemIdx < 0 ? stemIdx + 10 : stemIdx] + branches[branchIdx < 0 ? branchIdx + 12 : branchIdx];
+      };
 
       return (
         <div className="bg-zinc-950 border-t border-zinc-800 p-3 flex flex-col gap-2 animate-in slide-in-from-bottom-4">
@@ -120,30 +129,37 @@ export default function ChatRoom() {
           {/* 大限轨道 */}
           <div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
             {decades.map((d, idx) => {
-              const start = birthYear + d.range[0] - 1;
-              const end = birthYear + d.range[1] - 1;
-              const isActive = currentYear >= start && currentYear <= end;
+              const startYear = birthLunarYear + d.range[0] - 1;
+              const endYear = birthLunarYear + d.range[1] - 1;
+              const isActive = currentYear >= startYear && currentYear <= endYear;
               return (
                 <button key={idx} 
-                  onClick={() => { setSelectedDecadeIndex(idx); setFocusDate(new Date(start, 0, 1)); }}
-                  className={`px-3 py-1 rounded border text-xs min-w-[70px] flex-shrink-0 ${isActive ? 'border-emerald-500 bg-emerald-900/30 text-emerald-400' : 'border-zinc-800 text-zinc-500'}`}>
-                  <div>{d.range[0]}-{d.range[1]}岁</div><div className="scale-75">{d.name}限</div>
+                  onClick={() => { setSelectedDecadeIndex(idx); setFocusDate(new Date(startYear, 6, 1)); }}
+                  className={`px-3 py-1 rounded border text-xs min-w-[85px] flex-shrink-0 flex flex-col items-center ${isActive ? 'border-emerald-500 bg-emerald-900/30 text-emerald-400' : 'border-zinc-800 text-zinc-500'}`}>
+                  <div className="font-bold">{d.range[0]}-{d.range[1]}岁</div>
+                  <div className="text-[10px] opacity-80">{d.heavenlyStem}{d.earthlyBranch}{d.name}限</div>
                 </button>
               );
             })}
           </div>
           {/* 流年轨道 */}
-          <div className="grid grid-cols-10 gap-1">
+          <div className="grid grid-cols-5 sm:grid-cols-10 gap-1">
              {(() => {
-               const activeIdx = selectedDecadeIndex === -1 ? decades.findIndex(d => currentYear >= (birthYear + d.range[0]-1) && currentYear <= (birthYear + d.range[1]-1)) : selectedDecadeIndex;
+               const activeIdx = selectedDecadeIndex === -1 ? decades.findIndex(d => currentYear >= (birthLunarYear + d.range[0]-1) && currentYear <= (birthLunarYear + d.range[1]-1)) : selectedDecadeIndex;
                const d = decades[activeIdx];
                if(!d) return null;
-               return Array.from({length:10}, (_,i) => birthYear + d.range[0] - 1 + i).map(y => (
-                 <button key={y} onClick={() => setFocusDate(new Date(y, 0, 1))}
-                   className={`h-8 rounded text-[10px] border flex items-center justify-center ${y === currentYear ? 'bg-emerald-600 text-white' : 'bg-zinc-900 text-zinc-500 border-zinc-800'}`}>
-                   {y}
-                 </button>
-               ));
+               return Array.from({length:10}, (_,i) => birthLunarYear + d.range[0] - 1 + i).map(y => {
+                 const age = y - birthLunarYear + 1;
+                 const gz = getYearGanZhi(y);
+                 return (
+                   <button key={y} onClick={() => setFocusDate(new Date(y, 6, 1))}
+                     className={`h-12 rounded text-[10px] border flex flex-col items-center justify-center leading-tight transition-colors ${y === currentYear ? 'bg-emerald-600 text-white border-emerald-400' : 'bg-zinc-900 text-zinc-500 border-zinc-800 hover:border-zinc-600'}`}>
+                     <div className="font-mono opacity-60">{y}年</div>
+                     <div className="font-bold text-xs">{gz}</div>
+                     <div className="scale-90 opacity-80">{age}岁</div>
+                   </button>
+                 );
+               });
              })()}
           </div>
         </div>
@@ -576,7 +592,7 @@ export default function ChatRoom() {
                             birthTime={obj.rawParams.birthTime}
                             birthdayType={obj.rawParams.birthdayType}
                             gender={obj.rawParams.gender}
-                            horoscopeDate={focusDate || new Date()} // ✅ 绑定状态，流年随时间轴变动
+                            horoscopeDate={focusDate} // ✅ 绑定状态，流年随时间轴变动
                             horoscopeHour={new Date().getHours()}
                           />
                         </div>
