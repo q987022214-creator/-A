@@ -134,7 +134,13 @@ export default function ChatRoom() {
               const isActive = currentYear >= startYear && currentYear <= endYear;
               return (
                 <button key={idx} 
-                  onClick={() => { setSelectedDecadeIndex(idx); setFocusDate(new Date(startYear, 6, 1)); }}
+                  onClick={() => { 
+                    const startYear = birthLunarYear + d.range[0] - 1;
+                    const newDate = new Date(startYear, 6, 1);
+                    console.log("点击大限:", { idx, startYear, ageRange: d.range, newDate });
+                    setSelectedDecadeIndex(idx); 
+                    setFocusDate(newDate); 
+                  }}
                   className={`px-3 py-1 rounded border text-xs min-w-[85px] flex-shrink-0 flex flex-col items-center ${isActive ? 'border-emerald-500 bg-emerald-900/30 text-emerald-400' : 'border-zinc-800 text-zinc-500'}`}>
                   <div className="font-bold">{d.range[0]}-{d.range[1]}岁</div>
                   <div className="text-[10px] opacity-80">{d.heavenlyStem}{d.earthlyBranch}{d.name}限</div>
@@ -585,9 +591,44 @@ export default function ChatRoom() {
                       const obj = JSON.parse(clean);
                       if (!obj.rawParams) return <div className="p-10 text-zinc-500 text-center mt-20">文本导入的旧数据不支持互动，请使用原生排盘</div>;
                       
+                      const iztroKey = `iztro-${selectedDecadeIndex}-${focusDate.getTime()}`;
+                      
+                      // 手动计算运限数据以验证
+                      const astrolabe = astro.bySolar(obj.rawParams.birthday, obj.rawParams.birthTime, obj.rawParams.gender, true, 'zh-CN');
+                      const horoscope = astrolabe.horoscope(focusDate);
+                      
+                      // 提取大限四化落在哪个宫位
+                      // iztro v2 中 decadal.mutagen 是一个数组 [禄, 权, 科, 忌] 对应的星曜名
+                      const decadalMutagensInfo = horoscope.decadal.mutagen.map((starName, index) => {
+                        const mutagens = ['禄', '权', '科', '忌'];
+                        const palace = astrolabe.palaces.find(p => 
+                          p.majorStars.some(s => s.name === starName) || 
+                          p.minorStars.some(s => s.name === starName) ||
+                          p.adjectiveStars.some(s => s.name === starName)
+                        );
+                        return { star: starName, mutagen: mutagens[index], palaceIndex: palace?.index };
+                      }).filter(info => info.star); // 过滤掉空的星曜
+
+                      // 提取流年四化落在哪个宫位
+                      const yearlyMutagensInfo = horoscope.yearly.mutagen.map((starName, index) => {
+                        const mutagens = ['禄', '权', '科', '忌'];
+                        const palace = astrolabe.palaces.find(p => 
+                          p.majorStars.some(s => s.name === starName) || 
+                          p.minorStars.some(s => s.name === starName) ||
+                          p.adjectiveStars.some(s => s.name === starName)
+                        );
+                        return { star: starName, mutagen: mutagens[index], palaceIndex: palace?.index };
+                      }).filter(info => info.star);
+
+                      console.log("大限四化真实内容:", horoscope.decadal.mutagen);
+                      console.log("大限四化详细映射:", decadalMutagensInfo);
+                      console.log("流年四化真实内容:", horoscope.yearly.mutagen);
+                      console.log("流年四化详细映射:", yearlyMutagensInfo);
+
                       return (
-                        <div className="transform scale-90 origin-top pb-10">
+                        <div className="relative transform scale-90 origin-top pb-10">
                           <Iztrolabe 
+                            key={iztroKey}
                             birthday={obj.rawParams.birthday}
                             birthTime={obj.rawParams.birthTime}
                             birthdayType={obj.rawParams.birthdayType}
@@ -595,6 +636,68 @@ export default function ChatRoom() {
                             horoscopeDate={focusDate} // ✅ 绑定状态，流年随时间轴变动
                             horoscopeHour={new Date().getHours()}
                           />
+                          
+                          {/* 业务层补渲染：大限 & 流年四化 (精准定位到宫位) */}
+                          <div className="absolute inset-0 pointer-events-none grid grid-cols-4 grid-rows-4 gap-[3px]">
+                            {/* 大限四化 */}
+                            {decadalMutagensInfo.map((info, i) => {
+                              if (info.palaceIndex === undefined) return null;
+                              const gridAreas = ["g0", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8", "g9", "g10", "g11"];
+                              const area = gridAreas[info.palaceIndex];
+                              return (
+                                <div key={`decadal-${i}`} style={{ gridArea: area }} className="relative">
+                                  <div className="absolute top-1 right-1 flex flex-col items-end gap-1">
+                                    <div className={`text-[10px] px-1 rounded text-white font-bold shadow-sm ${
+                                      info.mutagen === '禄' ? 'bg-red-600' :
+                                      info.mutagen === '权' ? 'bg-blue-600' :
+                                      info.mutagen === '科' ? 'bg-emerald-600' :
+                                      'bg-zinc-700'
+                                    }`}>
+                                      运{info.mutagen}
+                                    </div>
+                                    <div className="text-[9px] text-zinc-400 bg-black/40 px-1 rounded">{info.star}</div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+
+                            {/* 流年四化 */}
+                            {yearlyMutagensInfo.map((info, i) => {
+                              if (info.palaceIndex === undefined) return null;
+                              const gridAreas = ["g0", "g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8", "g9", "g10", "g11"];
+                              const area = gridAreas[info.palaceIndex];
+                              return (
+                                <div key={`yearly-${i}`} style={{ gridArea: area }} className="relative">
+                                  <div className="absolute bottom-1 right-1 flex flex-col items-end gap-1">
+                                    <div className={`text-[10px] px-1 rounded text-white font-bold shadow-sm ${
+                                      info.mutagen === '禄' ? 'bg-orange-600' :
+                                      info.mutagen === '权' ? 'bg-cyan-600' :
+                                      info.mutagen === '科' ? 'bg-lime-600' :
+                                      'bg-zinc-500'
+                                    }`}>
+                                      流{info.mutagen}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                            
+                            {/* 中心摘要 */}
+                            <div style={{ gridArea: 'ct' }} className="flex items-center justify-center">
+                              <div className="w-28 h-28 bg-zinc-950/60 backdrop-blur-sm border border-emerald-500/20 rounded-full flex flex-col items-center justify-center p-2">
+                                <div className="text-[10px] text-emerald-400 font-bold mb-1">运限四化</div>
+                                <div className="flex flex-wrap justify-center gap-x-2 gap-y-0.5">
+                                  {decadalMutagensInfo.map((info, i) => (
+                                    <span key={i} className="text-[9px] text-zinc-400">{info.star}运{info.mutagen}</span>
+                                  ))}
+                                  <div className="w-full border-t border-zinc-800 my-0.5"></div>
+                                  {yearlyMutagensInfo.map((info, i) => (
+                                    <span key={i} className="text-[9px] text-zinc-500">{info.star}流{info.mutagen}</span>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       );
                     } catch(e) { return <div className="p-10 text-red-500">数据解析错误</div> }
