@@ -70,7 +70,7 @@ export const generateNativeChart = (dateStr: string, timeStr: string | number, g
           ...(horoscope?.yearly?.mutagens?.filter(m => m.palaceIndex === index).map(m => `[流年${m.mutagen}]${m.star}`) || [])
         ];
         
-        // 【核心修复】：将星曜的亮度(brightness)和四化(mutagen)严格拼接到字符串中
+        // 【核心修复】：必须将亮度与四化拼接到字符串上，供计分器正则读取
         const stars = [
           ...p.majorStars.map((s: any) => `${s.name}${s.brightness ? `(${s.brightness})` : ''}${s.mutagen ? `[化${s.mutagen}]` : ''}`),
           ...p.minorStars.map((s: any) => `${s.name}${s.brightness ? `(${s.brightness})` : ''}`),

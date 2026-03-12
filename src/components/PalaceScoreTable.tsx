@@ -60,14 +60,14 @@ export default function PalaceScoreTable({ iztroData }: PalaceScoreTableProps) {
           <td className="px-4 py-4">
             <div className="flex flex-col gap-1">
               <div className="flex flex-wrap gap-1">
-                {p.breakdowns.slice(0, 3).map((b, i) => (
+                {p.baseBreakdowns.slice(0, 3).map((b, i) => (
                   <span key={i} className="text-[9px] px-1.5 py-0.5 bg-zinc-900 text-zinc-400 rounded-sm border border-zinc-800 font-medium">
                     {b.starName}
                   </span>
                 ))}
-                {p.breakdowns.length > 3 && <span className="text-[9px] text-zinc-600 font-bold">+{p.breakdowns.length - 3}</span>}
+                {p.baseBreakdowns.length > 3 && <span className="text-[9px] text-zinc-600 font-bold">+{p.baseBreakdowns.length - 3}</span>}
               </div>
-              <span className="text-[10px] text-zinc-600 font-mono tracking-tighter uppercase">Raw: {p.rawScore > 0 ? `+${p.rawScore}` : p.rawScore}</span>
+              <span className="text-[10px] text-zinc-600 font-mono tracking-tighter uppercase">Base: {p.baseScore > 0 ? `+${p.baseScore}` : p.baseScore}</span>
             </div>
           </td>
           <td className="px-4 py-4">
@@ -98,7 +98,7 @@ export default function PalaceScoreTable({ iztroData }: PalaceScoreTableProps) {
                     <span className="text-[10px] font-black uppercase tracking-[0.2em]">本宫得分明细 (Raw Score Breakdown)</span>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {p.breakdowns.length > 0 ? p.breakdowns.map((b, bIdx) => (
+                    {p.baseBreakdowns.length > 0 ? p.baseBreakdowns.map((b, bIdx) => (
                       <div key={bIdx} className="bg-zinc-950/50 border border-zinc-800/50 rounded-lg p-3 flex justify-between items-center group hover:border-zinc-700 transition-colors">
                         <div className="flex flex-col">
                           <span className="text-zinc-200 font-bold text-xs">{b.starName}</span>
@@ -126,7 +126,7 @@ export default function PalaceScoreTable({ iztroData }: PalaceScoreTableProps) {
                     </div>
                     
                     <div className="flex flex-col gap-4 relative z-10">
-                      {p.formula.map((f, fIdx) => (
+                      {p.formulaDetails.map((f, fIdx) => (
                         <div key={fIdx} className="flex items-center gap-4 group">
                           <div className="w-24 flex flex-col">
                             <span className="text-[10px] text-zinc-500 font-black uppercase tracking-tighter">{f.palaceRole}</span>
@@ -275,7 +275,7 @@ export default function PalaceScoreTable({ iztroData }: PalaceScoreTableProps) {
         </h4>
         <p className="text-sm text-zinc-400 leading-relaxed relative z-10 font-medium">
           基于三方四正加权共振算法，您的 <span className="text-emerald-400 font-black">{strongPalaces[0].palaceName}</span> 以 <span className="text-emerald-400 font-mono text-xl tracking-tighter">{strongPalaces[0].finalScore.toFixed(1)}</span> 的高分位居榜首。
-          这意味着该领域不仅自身能量充沛（底分 {strongPalaces[0].rawScore}），且得到了对宫与三合宫的强力共振支撑。
+          这意味着该领域不仅自身能量充沛（底分 {strongPalaces[0].baseScore}），且得到了对宫与三合宫的强力共振支撑。
           建议优先在 <span className="text-emerald-400 underline decoration-emerald-500/30 underline-offset-8 font-bold">{strongPalaces.map(p => p.palaceName).join('、')}</span> 相关事务上投入精力。
           反之，<span className="text-red-400 font-black">{weakPalaces[weakPalaces.length-1].palaceName}</span> 得分最低，受负向共振影响较大，需防范连锁性的损耗风险。
         </p>

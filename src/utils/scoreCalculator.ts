@@ -1,12 +1,11 @@
-
-export interface ScoreBreakdown {
+export interface StarBreakdown {
   starName: string;
   reason: string;
   score: number;
 }
 
-export interface FormulaStep {
-  palaceRole: string; // "本宫", "对宫", "三合A", "三合B"
+export interface FormulaDetail {
+  palaceRole: string;
   palaceName: string;
   rawScore: number;
   weight: number;
@@ -18,180 +17,144 @@ export interface PalaceScore {
   palaceName: string;
   earthlyBranch: string;
   heavenlyStem: string;
-  rawScore: number; // 第一步：单宫纯净分
-  finalScore: number; // 第二步：三方四正总分
-  breakdowns: ScoreBreakdown[]; // 得分明细
-  formula: FormulaStep[]; // 计算公式明细
+  baseScore: number;       // 第一步：无衰减的本宫得分
+  finalScore: number;      // 第二步：三方四正加权得分 (核心排序依据)
+  baseBreakdowns: StarBreakdown[]; // 本宫得分明细
+  formulaDetails: FormulaDetail[]; // 三方四正推演公式
   starsStr: string;
 }
 
 export function calculateChartScores(iztroData: any): PalaceScore[] {
   if (!iztroData || !iztroData.palaces) return [];
-
   const palaces = iztroData.palaces;
-  const rawScores: number[] = new Array(12).fill(0);
-  const palaceResults: PalaceScore[] = [];
+  const results: PalaceScore[] = [];
 
-  // --- 第一步：计算单宫纯净分 (Raw Score) ---
-  for (let i = 0; i < 12; i++) {
-    const palace = palaces[i];
-    const pName = palace.name;
-    const stars: string[] = palace.stars || []; // 例如 ["太阳(庙)[化忌]", "文昌(得)", "离心自化禄"]
-    
-    let score = 0;
-    const breakdowns: ScoreBreakdown[] = [];
-    
-    // 辅助判定变量
-    const starNames = stars.map(s => s.split(/[([]/)[0]);
-    const hasStar = (name: string) => starNames.includes(name);
-    const hasPattern = (pattern: string) => stars.some(s => s.includes(pattern));
-    
-    // 1. 主星亮度与辅曜吉凶解析
-    stars.forEach(starStr => {
-      const name = starStr.split(/[([]/)[0];
-      
-      // A. 主星亮度
-      if (starStr.includes('(庙)')) {
-        const bScore = (name === '太阳' || name === '太阴') ? 5 : 4;
-        score += bScore;
-        breakdowns.push({ starName: name, reason: '亮度(庙)', score: bScore });
-      } else if (starStr.includes('(旺)')) {
-        score += 3;
-        breakdowns.push({ starName: name, reason: '亮度(旺)', score: 3 });
-      } else if (starStr.includes('(得)')) {
-        score += 2;
-        breakdowns.push({ starName: name, reason: '亮度(得)', score: 2 });
-      } else if (starStr.includes('(平)')) {
-        score += 1;
-        breakdowns.push({ starName: name, reason: '亮度(平)', score: 1 });
-      } else if (starStr.includes('(陷)')) {
-        const bScore = (name === '太阳') ? -2 : -1;
-        score += bScore;
-        breakdowns.push({ starName: name, reason: '亮度(陷)', score: bScore });
+  // ==========================================
+  // 第一步：独立计算十二宫各自的【本宫基础分】
+  // ==========================================
+  for (let i = 0; i < palaces.length; i++) {
+    const p = palaces[i];
+    const allStars: string[] = [...(p.stars || []), ...(p.flyInMutagens || [])];
+    const pName = p.name || '';
+    let baseScore = 0;
+    const baseBreakdowns: StarBreakdown[] = [];
+    const pureStarNames = allStars.map(s => s.replace(/[(\[【].*?[)\]】]/g, '')); // 提取纯星曜名用于组合判断
+
+    allStars.forEach(starStr => {
+      const starName = starStr.replace(/[(\[【].*?[)\]】]/g, '');
+
+      // 1. 主星亮度赋分
+      const majorStars = ["紫微","天机","太阳","武曲","天同","廉贞","天府","太阴","贪狼","巨门","天相","天梁","七杀","破军"];
+      if (majorStars.includes(starName)) {
+        if (starStr.includes('庙')) {
+          const s = (starName === '太阳' || starName === '太阴') ? 5 : 4;
+          baseScore += s; baseBreakdowns.push({ starName, reason: '亮度(庙)', score: s });
+        } else if (starStr.includes('旺')) {
+          baseScore += 3; baseBreakdowns.push({ starName, reason: '亮度(旺)', score: 3 });
+        } else if (starStr.includes('得')) {
+          baseScore += 2; baseBreakdowns.push({ starName, reason: '亮度(得)', score: 2 });
+        } else if (starStr.includes('平')) {
+          baseScore += 1; baseBreakdowns.push({ starName, reason: '亮度(平)', score: 1 });
+        } else if (starStr.includes('陷')) {
+          const s = (starName === '太阳') ? -2 : -1;
+          baseScore += s; baseBreakdowns.push({ starName, reason: '亮度(陷)', score: s });
+        }
       }
 
-      // B. 辅曜吉凶
-      const luckyStars = ['左辅', '右弼', '天魁', '天钺', '文昌', '文曲', '禄存'];
-      const harmfulStars = ['擎羊', '陀罗', '火星', '铃星', '地空', '地劫'];
-
-      if (luckyStars.includes(name)) {
-        score += 2;
-        breakdowns.push({ starName: name, reason: '吉星助益', score: 2 });
-      } else if (harmfulStars.includes(name)) {
-        const hScore = starStr.includes('(庙)') ? -1 : -2;
-        score += hScore;
-        breakdowns.push({ starName: name, reason: '煞星损耗', score: hScore });
+      // 2. 辅曜吉凶赋分
+      const goodStars = ["左辅", "右弼", "天魁", "天钺", "文昌", "文曲", "禄存"];
+      const badStars = ["擎羊", "陀罗", "火星", "铃星", "地空", "地劫"];
+      if (goodStars.includes(starName)) {
+        baseScore += 2; baseBreakdowns.push({ starName, reason: '吉星助益', score: 2 });
       }
-    });
-
-    // C. 组合加成
-    // 擎羊/陀罗(庙旺) + 天同
-    const hasYangTuoBright = stars.some(s => (s.includes('擎羊') || s.includes('陀罗')) && (s.includes('(庙)') || s.includes('(旺)')));
-    if (hasYangTuoBright && hasStar('天同')) {
-      score += 2;
-      breakdowns.push({ starName: '天同格局', reason: '同阴羊陀/马头带箭类加成', score: 2 });
-    }
-    // 火星/铃星(庙旺) + 贪狼
-    const hasHuoLingBright = stars.some(s => (s.includes('火星') || s.includes('铃星')) && (s.includes('(庙)') || s.includes('(旺)')));
-    if (hasHuoLingBright && hasStar('贪狼')) {
-      score += 2;
-      breakdowns.push({ starName: '贪狼格局', reason: '火贪/铃贪格加成', score: 2 });
-    }
-
-    // 2. 生年四化解析
-    let hasLu = false;
-    let hasJi = false;
-
-    stars.forEach(starStr => {
-      const name = starStr.split(/[([]/)[0];
-      if (starStr.includes('[化禄]')) {
-        score += 4;
-        hasLu = true;
-        breakdowns.push({ starName: name, reason: '生年化禄', score: 4 });
-      } else if (starStr.includes('[化权]')) {
-        score += 3;
-        breakdowns.push({ starName: name, reason: '生年化权', score: 3 });
-      } else if (starStr.includes('[化科]')) {
-        score += 2;
-        breakdowns.push({ starName: name, reason: '生年化科', score: 2 });
-      } else if (starStr.includes('[化忌]')) {
-        hasJi = true;
-        const jiScore = (['夫妻宫', '交友宫', '子女宫'].includes(pName)) ? -3 : -1;
-        score += jiScore;
-        breakdowns.push({ starName: name, reason: `生年化忌(${pName})`, score: jiScore });
+      if (badStars.includes(starName)) {
+        const s = starStr.includes('庙') ? -1 : -2;
+        baseScore += s; baseBreakdowns.push({ starName, reason: starStr.includes('庙') ? '煞星(庙)减害' : '煞星损耗', score: s });
+        // 煞星组合特例
+        if ((starName === '擎羊' || starName === '陀罗') && (starStr.includes('庙') || starStr.includes('旺')) && pureStarNames.includes('天同')) {
+          baseScore += 2; baseBreakdowns.push({ starName: `${starName}+天同`, reason: '特定吉化组合', score: 2 });
+        }
+        if ((starName === '火星' || starName === '铃星') && (starStr.includes('庙') || starStr.includes('旺')) && pureStarNames.includes('贪狼')) {
+          baseScore += 2; baseBreakdowns.push({ starName: `${starName}+贪狼`, reason: '火贪/铃贪格', score: 2 });
+        }
       }
-    });
 
-    if (hasLu && hasJi) {
-      score -= 4;
-      breakdowns.push({ starName: '禄忌同宫', reason: '双忌效应/禄忌冲', score: -4 });
-    }
+      // 3. 四化赋分 (包含 生年与飞入)
+      if (starStr.includes('化禄') || starStr.includes('禄]')) { baseScore += 4; baseBreakdowns.push({ starName, reason: '化禄', score: 4 }); }
+      if (starStr.includes('化权') || starStr.includes('权]')) { baseScore += 3; baseBreakdowns.push({ starName, reason: '化权', score: 3 }); }
+      if (starStr.includes('化科') || starStr.includes('科]')) { baseScore += 2; baseBreakdowns.push({ starName, reason: '化科', score: 2 }); }
+      if (starStr.includes('化忌') || starStr.includes('忌]')) {
+        let s = -1;
+        if (['交友宫', '夫妻宫', '子女宫'].includes(pName)) s = -3;
+        baseScore += s; baseBreakdowns.push({ starName, reason: '化忌', score: s });
+      }
 
-    // 3. 自化解析
-    stars.forEach(starStr => {
+      // 4. 自化赋分
       if (starStr.includes('向心')) {
-        if (starStr.includes('禄')) { score += 3; breakdowns.push({ starName: '向心自化', reason: '向心自化禄', score: 3 }); }
-        else if (starStr.includes('权')) { score += 2; breakdowns.push({ starName: '向心自化', reason: '向心自化权', score: 2 }); }
-        else if (starStr.includes('科')) { score += 2; breakdowns.push({ starName: '向心自化', reason: '向心自化科', score: 2 }); }
-        else if (starStr.includes('忌')) { score -= 1; breakdowns.push({ starName: '向心自化', reason: '向心自化忌', score: -1 }); }
-      } else if (starStr.includes('离心')) {
-        if (starStr.includes('禄')) { score += 1; breakdowns.push({ starName: '离心自化', reason: '离心自化禄', score: 1 }); }
-        else if (starStr.includes('权')) { score += 1; breakdowns.push({ starName: '离心自化', reason: '离心自化权', score: 1 }); }
-        else if (starStr.includes('忌')) { score -= 3; breakdowns.push({ starName: '离心自化', reason: '离心自化忌', score: -3 }); }
+        if (starStr.includes('禄')) { baseScore += 3; baseBreakdowns.push({ starName, reason: '向心禄', score: 3 }); }
+        if (starStr.includes('权')) { baseScore += 2; baseBreakdowns.push({ starName, reason: '向心权', score: 2 }); }
+        if (starStr.includes('科')) { baseScore += 2; baseBreakdowns.push({ starName, reason: '向心科', score: 2 }); }
+        if (starStr.includes('忌')) { baseScore -= 1; baseBreakdowns.push({ starName, reason: '向心忌', score: -1 }); }
+      }
+      if (starStr.includes('离心')) {
+        if (starStr.includes('禄')) { baseScore += 1; baseBreakdowns.push({ starName, reason: '离心禄', score: 1 }); }
+        if (starStr.includes('权')) { baseScore += 1; baseBreakdowns.push({ starName, reason: '离心权', score: 1 }); }
+        if (starStr.includes('忌')) { baseScore -= 3; baseBreakdowns.push({ starName, reason: '离心忌', score: -3 }); }
+      }
+
+      // 5. 得位失位
+      if (pName === '财帛宫' && (['武曲','太阴','禄存'].includes(starName) || starStr.includes('禄'))) {
+        baseScore += 1; baseBreakdowns.push({ starName, reason: '星曜得位', score: 1 });
+      }
+      if (['夫妻宫','兄弟宫','交友宫','父母宫'].includes(pName) && ['七杀','破军','武曲','巨门'].includes(starName)) {
+        baseScore -= 1; baseBreakdowns.push({ starName, reason: '星曜失位', score: -1 });
+      }
+      if (['财帛宫','田宅宫'].includes(pName) && ['地空','地劫'].includes(starName)) {
+        baseScore -= 3; baseBreakdowns.push({ starName, reason: '空劫破库', score: -3 });
       }
     });
 
-    // 4. 得位失位特例
-    if (pName === '财帛宫') {
-      ['武曲', '太阴', '禄存'].forEach(n => {
-        if (hasStar(n)) { score += 1; breakdowns.push({ starName: n, reason: '财星入财位', score: 1 }); }
-      });
-      if (hasPattern('[化禄]')) { score += 1; breakdowns.push({ starName: '化禄', reason: '禄入财位', score: 1 }); }
+    // 禄忌同宫惩罚
+    if (allStars.some(s => s.includes('禄')) && allStars.some(s => s.includes('忌'))) {
+      baseScore -= 4; baseBreakdowns.push({ starName: '全局', reason: '禄忌同宫破格', score: -4 });
     }
 
-    if (['夫妻宫', '兄弟宫', '交友宫', '父母宫'].includes(pName)) {
-      ['七杀', '破军', '武曲', '巨门'].forEach(n => {
-        if (hasStar(n)) { score -= 1; breakdowns.push({ starName: n, reason: '孤刚星入六亲宫', score: -1 }); }
-      });
-    }
-
-    if (['财帛宫', '田宅宫'].includes(pName)) {
-      ['地空', '地劫'].forEach(n => {
-        if (hasStar(n)) { score -= 3; breakdowns.push({ starName: n, reason: '空劫入财田', score: -3 }); }
-      });
-    }
-
-    rawScores[i] = score;
-    palaceResults.push({
+    results.push({
       index: i,
       palaceName: pName,
-      earthlyBranch: palace.earthlyBranch || '',
-      heavenlyStem: palace.heavenlyStem || '',
-      rawScore: score,
+      earthlyBranch: p.earthlyBranch || '',
+      heavenlyStem: p.heavenlyStem || '',
+      baseScore,
       finalScore: 0,
-      breakdowns,
-      formula: [],
-      starsStr: starNames.join(' ')
+      baseBreakdowns,
+      formulaDetails: [],
+      starsStr: allStars.join(' ')
     });
   }
 
-  // --- 第二步：计算最终排名总分 (Final Score) ---
-  for (let i = 0; i < 12; i++) {
-    const oppIdx = (i + 6) % 12;
-    const trineAIdx = (i + 4) % 12;
-    const trineBIdx = (i + 8) % 12;
+  // ==========================================
+  // 第二步：执行三方四正衰减算法计算【最终得分】
+  // ==========================================
+  for (let i = 0; i < results.length; i++) {
+    const cur = results[i];
+    const opp = results[(i + 6) % 12];
+    const trA = results[(i + 4) % 12];
+    const trB = results[(i + 8) % 12];
 
-    const steps: FormulaStep[] = [
-      { palaceRole: '本宫', palaceName: palaceResults[i].palaceName, rawScore: rawScores[i], weight: 1.0, calculatedScore: rawScores[i] * 1.0 },
-      { palaceRole: '对宫', palaceName: palaceResults[oppIdx].palaceName, rawScore: rawScores[oppIdx], weight: 0.5, calculatedScore: rawScores[oppIdx] * 0.5 },
-      { palaceRole: '三合A', palaceName: palaceResults[trineAIdx].palaceName, rawScore: rawScores[trineAIdx], weight: 0.2, calculatedScore: rawScores[trineAIdx] * 0.2 },
-      { palaceRole: '三合B', palaceName: palaceResults[trineBIdx].palaceName, rawScore: rawScores[trineBIdx], weight: 0.2, calculatedScore: rawScores[trineBIdx] * 0.2 }
+    const cBase = cur.baseScore * 1.0;
+    const cOpp = opp.baseScore * 0.5;
+    const cTrA = trA.baseScore * 0.2;
+    const cTrB = trB.baseScore * 0.2;
+
+    cur.finalScore = cBase + cOpp + cTrA + cTrB;
+
+    cur.formulaDetails = [
+      { palaceRole: '本宫', palaceName: cur.palaceName, rawScore: cur.baseScore, weight: 1.0, calculatedScore: cBase },
+      { palaceRole: '对宫', palaceName: opp.palaceName, rawScore: opp.baseScore, weight: 0.5, calculatedScore: cOpp },
+      { palaceRole: '三合', palaceName: trA.palaceName, rawScore: trA.baseScore, weight: 0.2, calculatedScore: cTrA },
+      { palaceRole: '三合', palaceName: trB.palaceName, rawScore: trB.baseScore, weight: 0.2, calculatedScore: cTrB },
     ];
-
-    const finalScore = steps.reduce((sum, s) => sum + s.calculatedScore, 0);
-    palaceResults[i].finalScore = Math.round(finalScore * 10) / 10;
-    palaceResults[i].formula = steps;
   }
 
-  return palaceResults.sort((a, b) => b.finalScore - a.finalScore);
+  return results.sort((a, b) => b.finalScore - a.finalScore);
 }
