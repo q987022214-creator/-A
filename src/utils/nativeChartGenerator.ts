@@ -70,16 +70,21 @@ export const generateNativeChart = (dateStr: string, timeStr: string | number, g
           ...(horoscope?.yearly?.mutagens?.filter(m => m.palaceIndex === index).map(m => `[流年${m.mutagen}]${m.star}`) || [])
         ];
         
-        // 兼容旧的 star 显示格式
+        // 【核心修复】：将星曜的亮度(brightness)和四化(mutagen)严格拼接到字符串中
         const stars = [
-          ...p.majorStars.map(s => s.name + (s.mutagen ? `[${s.mutagen}]` : '')),
-          ...p.minorStars.map(s => s.name),
-          ...p.adjectiveStars.map(s => s.name)
+          ...p.majorStars.map((s: any) => `${s.name}${s.brightness ? `(${s.brightness})` : ''}${s.mutagen ? `[化${s.mutagen}]` : ''}`),
+          ...p.minorStars.map((s: any) => `${s.name}${s.brightness ? `(${s.brightness})` : ''}`),
+          ...p.adjectiveStars.map((s: any) => s.name)
         ];
 
         return {
           name: p.name,
+          heavenlyStem: p.heavenlyStem,
+          earthlyBranch: p.earthlyBranch,
           ganzhi: p.heavenlyStem + p.earthlyBranch,
+          majorStars: p.majorStars,
+          minorStars: p.minorStars,
+          adjectiveStars: p.adjectiveStars,
           stars: stars,
           flyInMutagens: flyIn // AI 需要这个来判断吉凶
         };
