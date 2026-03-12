@@ -139,15 +139,15 @@ export default function ChatRoom() {
       const currentYear = focusDate.getFullYear();
 
       return (
-        <div className="bg-zinc-950 border-t border-zinc-800 p-2 flex flex-col gap-1.5 animate-in slide-in-from-bottom-4 shrink-0 max-h-[25%]">
+        <div className="bg-zinc-950 border-t border-zinc-800 p-2 flex flex-col gap-1.5 animate-in slide-in-from-bottom-4 shrink-0 max-h-[25%] no-scrollbar overflow-y-auto">
           <div className="flex justify-between text-[10px] text-emerald-300 font-mono px-1">
             <span className="flex items-center gap-1">⏳ 时空穿梭机</span>
             <span>推演: {currentYear}年</span>
           </div>
           
           <div className="flex gap-2 items-center">
-            {/* 大限轨道 */}
-            <div className="flex-1 flex gap-1.5 overflow-x-auto pb-1 custom-scrollbar px-1">
+            {/* 大限轨道 - 改为网格布局以取消滑动模块 */}
+            <div className="flex-1 grid grid-cols-4 sm:grid-cols-6 md:grid-cols-12 gap-1 px-1">
               {decades.map((d, idx) => {
                 const startYear = birthLunarYear + d.range[0] - 1;
                 const isActive = selectedDecadeIndex === idx;
@@ -163,7 +163,7 @@ export default function ChatRoom() {
                         setFocusDate(new Date(startYear, 6, 1)); 
                       }
                     }}
-                    className={`px-2 py-1 rounded border text-[10px] min-w-[70px] flex-shrink-0 flex flex-col items-center transition-all ${isActive ? 'border-emerald-400 bg-emerald-800/40 text-emerald-300' : 'border-zinc-700 text-zinc-300 hover:border-zinc-500 bg-zinc-900'}`}>
+                    className={`px-1 py-1 rounded border text-[10px] flex flex-col items-center transition-all ${isActive ? 'border-emerald-400 bg-emerald-800/40 text-emerald-300' : 'border-zinc-700 text-zinc-300 hover:border-zinc-500 bg-zinc-900'}`}>
                     <div className="font-bold">{d.range[0]}-{d.range[1]}岁</div>
                     <div className="text-[9px] opacity-80">{d.heavenlyStem}{d.earthlyBranch}{d.name}</div>
                   </button>
@@ -472,7 +472,13 @@ export default function ChatRoom() {
     setMessages(prev => [...(prev || []), newUserMessage]);
     if (!customMsg) setInputValue('');
 
-    if (userMsg.length > 200 && (userMsg.includes('命盘') || userMsg.includes('文墨天机') || userMsg.includes('宫'))) {
+    // 【核心修复】：排除隐式系统指令，防止后台自动拼接的 prompt 覆盖左侧 UI 的命盘状态
+    if (
+      userMsg.length > 200 && 
+      !userMsg.includes('[系统指令') && 
+      !userMsg.includes('【当前焦点】') &&
+      (userMsg.includes('命盘') || userMsg.includes('文墨天机') || userMsg.includes('宫'))
+    ) {
       setActiveChartText(userMsg);
     }
 
@@ -555,7 +561,8 @@ export default function ChatRoom() {
 
 用户需求：请重点推算该运限的运势吉凶与注意事项。`;
 
-      const displayMsg = `帮我推算 ${ageRange}岁 ${focusTitle} 运势`;
+      // 【重点修改】用格式化的文本在聊天界面展示提取结果
+      const displayMsg = `🔮 【发起运限精准推算】\n▶ 焦点：${ageRange}岁 ${focusTitle}\n▶ 叠宫：运限命宫 叠 本命【${natalPalaceName}】\n▶ 四化：${focusStem}干引发「${siHua}」\n▶ 星系：宫内包含 ${stars}\n\n(注：底层全盘 JSON 架构已静默打包附带，正在呼叫大模型推演...)`;
       
       await handleSendMessage(prompt, displayMsg);
 
@@ -1008,7 +1015,7 @@ export default function ChatRoom() {
         {/* Bottom: Input Area */}
         <div className="p-4 bg-zinc-950/50 border-t border-zinc-800">
           {/* 快捷主题按钮 */}
-          <div className="flex gap-2 overflow-x-auto pb-3 custom-scrollbar no-scrollbar">
+          <div className="flex gap-2 overflow-x-auto pb-3 no-scrollbar">
             {[
               { label: '今年财运', q: '请帮我重点推算今年的财运状况，有哪些机会或风险？' },
               { label: '性格格局', q: '请详细分析我的性格特质、先天格局以及核心优劣势。' },
