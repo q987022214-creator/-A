@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Component, useState, useRef, useEffect, Suspense } from 'react';
-import { Send, Play, Loader2, Check, X, Bot, User, Trash2, Save, FolderOpen, LayoutDashboard, Compass } from 'lucide-react';
+import { Send, Play, Loader2, Check, X, Bot, User, Trash2, Save, FolderOpen, LayoutDashboard, Compass, Target, Zap } from 'lucide-react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { parseWenMoTianJiToJSON } from '../utils/ziweiParser';
 import { generateNativeChart } from '../utils/nativeChartGenerator';
@@ -82,7 +82,8 @@ export default function ChatRoom() {
   
   // ✅ 新增：时间机器状态
   const [focusDate, setFocusDate] = useState<Date>(new Date());
-  const [selectedDecadeIndex, setSelectedDecadeIndex] = useState<number>(-1);
+  const [selectedDecadeIndex, setSelectedDecadeIndex] = useState<number | null>(null);
+  const [selectedYear, setSelectedYear] = useState<number | null>(null);
   
   // Extraction state
   const [isExtracting, setIsExtracting] = useState(false);
@@ -95,6 +96,27 @@ export default function ChatRoom() {
 
   // Memories state
   const [memories, setMemories] = useLocalStorage<ChartMemory[]>('ziwei_memories', []);
+  
+  const SI_HUA_MAP: Record<string, string> = {
+    '甲': '廉贞化禄、破军化权、武曲化科、太阳化忌',
+    '乙': '天机化禄、天梁化权、紫微化科、太阴化忌',
+    '丙': '天同化禄、天机化权、文昌化科、廉贞化忌',
+    '丁': '太阴化禄、天同化权、天机化科、巨门化忌',
+    '戊': '贪狼化禄、太阴化权、右弼化科、天机化忌',
+    '己': '武曲化禄、贪狼化权、天梁化科、文曲化忌',
+    '庚': '太阳化禄、武曲化权、太阴化科、天同化忌',
+    '辛': '巨门化禄、太阳化权、文曲化科、文昌化忌',
+    '壬': '天梁化禄、紫微化权、左辅化科、武曲化忌',
+    '癸': '破军化禄、巨门化权、太阴化科、天同化忌',
+  };
+
+  const getYearGanZhi = (year: number) => {
+    const stems = "甲乙丙丁戊己庚辛壬癸";
+    const branches = "子丑寅卯辰巳午未申酉戌亥";
+    const stemIdx = (year - 4) % 10;
+    const branchIdx = (year - 4) % 12;
+    return stems[stemIdx < 0 ? stemIdx + 10 : stemIdx] + branches[branchIdx < 0 ? branchIdx + 12 : branchIdx];
+  };
 
   // 🕒 时间机器渲染函数 (使用 astro 核心算法)
   const renderTimeMachine = () => {
@@ -116,48 +138,75 @@ export default function ChatRoom() {
       const birthLunarYear = astrolabe.rawDates.lunarDate.lunarYear;
       const currentYear = focusDate.getFullYear();
 
-      const getYearGanZhi = (year: number) => {
-        const stems = "甲乙丙丁戊己庚辛壬癸";
-        const branches = "子丑寅卯辰巳午未申酉戌亥";
-        const stemIdx = (year - 4) % 10;
-        const branchIdx = (year - 4) % 12;
-        return stems[stemIdx < 0 ? stemIdx + 10 : stemIdx] + branches[branchIdx < 0 ? branchIdx + 12 : branchIdx];
-      };
-
       return (
         <div className="bg-zinc-950 border-t border-zinc-800 p-2 flex flex-col gap-1.5 animate-in slide-in-from-bottom-4 shrink-0 max-h-[25%]">
           <div className="flex justify-between text-[10px] text-emerald-300 font-mono px-1">
             <span className="flex items-center gap-1">⏳ 时空穿梭机</span>
             <span>推演: {currentYear}年</span>
           </div>
-          {/* 大限轨道 */}
-          <div className="flex gap-1.5 overflow-x-auto pb-1 custom-scrollbar px-1">
-            {decades.map((d, idx) => {
-              const startYear = birthLunarYear + d.range[0] - 1;
-              const endYear = birthLunarYear + d.range[1] - 1;
-              const isActive = currentYear >= startYear && currentYear <= endYear;
-              return (
-                <button key={idx} 
-                  onClick={() => { setSelectedDecadeIndex(idx); setFocusDate(new Date(startYear, 6, 1)); }}
-                  className={`px-2 py-1 rounded border text-[10px] min-w-[70px] flex-shrink-0 flex flex-col items-center transition-all ${isActive ? 'border-emerald-400 bg-emerald-800/40 text-emerald-300' : 'border-zinc-700 text-zinc-300 hover:border-zinc-500 bg-zinc-900'}`}>
-                  <div className="font-bold">{d.range[0]}-{d.range[1]}岁</div>
-                  <div className="text-[9px] opacity-80">{d.heavenlyStem}{d.earthlyBranch}{d.name}</div>
-                </button>
-              );
-            })}
+          
+          <div className="flex gap-2 items-center">
+            {/* 大限轨道 */}
+            <div className="flex-1 flex gap-1.5 overflow-x-auto pb-1 custom-scrollbar px-1">
+              {decades.map((d, idx) => {
+                const startYear = birthLunarYear + d.range[0] - 1;
+                const isActive = selectedDecadeIndex === idx;
+                return (
+                  <button key={idx} 
+                    onClick={() => { 
+                      if (selectedDecadeIndex === idx) {
+                        setSelectedDecadeIndex(null);
+                        setSelectedYear(null);
+                      } else {
+                        setSelectedDecadeIndex(idx); 
+                        setSelectedYear(null);
+                        setFocusDate(new Date(startYear, 6, 1)); 
+                      }
+                    }}
+                    className={`px-2 py-1 rounded border text-[10px] min-w-[70px] flex-shrink-0 flex flex-col items-center transition-all ${isActive ? 'border-emerald-400 bg-emerald-800/40 text-emerald-300' : 'border-zinc-700 text-zinc-300 hover:border-zinc-500 bg-zinc-900'}`}>
+                    <div className="font-bold">{d.range[0]}-{d.range[1]}岁</div>
+                    <div className="text-[9px] opacity-80">{d.heavenlyStem}{d.earthlyBranch}{d.name}</div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* 精准推算按钮 */}
+            <button
+              disabled={selectedDecadeIndex === null && selectedYear === null}
+              onClick={handleCalculateLimit}
+              className={`shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all ${
+                (selectedDecadeIndex !== null || selectedYear !== null)
+                  ? 'bg-emerald-500 text-black hover:bg-emerald-400 shadow-lg shadow-emerald-500/20'
+                  : 'bg-zinc-800 text-zinc-500 opacity-50 cursor-not-allowed'
+              }`}
+            >
+              <Zap size={14} fill="currentColor" />
+              精准推算
+            </button>
           </div>
+
           {/* 流年轨道 */}
           <div className="grid grid-cols-5 sm:grid-cols-10 gap-1 px-1">
              {(() => {
-               const activeIdx = selectedDecadeIndex === -1 ? decades.findIndex(d => currentYear >= (birthLunarYear + d.range[0]-1) && currentYear <= (birthLunarYear + d.range[1]-1)) : selectedDecadeIndex;
+               const activeIdx = selectedDecadeIndex === null ? -1 : selectedDecadeIndex;
+               if (activeIdx === -1) return <div className="col-span-full text-center py-2 text-zinc-600 text-[10px]">请先选择大限以展开流年</div>;
                const d = decades[activeIdx];
                if(!d) return null;
                return Array.from({length:10}, (_,i) => birthLunarYear + d.range[0] - 1 + i).map(y => {
                  const age = y - birthLunarYear + 1;
                  const gz = getYearGanZhi(y);
+                 const isSelected = selectedYear === y;
                  return (
-                   <button key={y} onClick={() => setFocusDate(new Date(y, 6, 1))}
-                     className={`h-10 rounded text-[9px] border flex flex-col items-center justify-center leading-tight transition-all ${y === currentYear ? 'bg-emerald-500 text-white border-emerald-300 shadow-lg shadow-emerald-900/40' : 'bg-zinc-800 text-zinc-200 border-zinc-700 hover:border-zinc-500'}`}>
+                   <button key={y} onClick={() => {
+                     if (selectedYear === y) {
+                       setSelectedYear(null);
+                     } else {
+                       setSelectedYear(y);
+                       setFocusDate(new Date(y, 6, 1));
+                     }
+                   }}
+                     className={`h-10 rounded text-[9px] border flex flex-col items-center justify-center leading-tight transition-all ${isSelected ? 'bg-emerald-500 text-white border-emerald-300 shadow-lg shadow-emerald-900/40' : 'bg-zinc-800 text-zinc-200 border-zinc-700 hover:border-zinc-500'}`}>
                      <div className="font-mono opacity-60 text-[8px]">{y}</div>
                      <div className="font-bold text-[10px]">{gz}</div>
                      <div className="opacity-80">{age}岁</div>
@@ -410,24 +459,110 @@ export default function ChatRoom() {
     }
   };
 
-  const handleSendMessage = async () => {
-    if (!inputValue.trim()) return;
+  const handleSendMessage = async (customMsg?: string, displayMsg?: string) => {
+    const userMsg = customMsg || inputValue.trim();
+    if (!userMsg) return;
     if (!apiSettings.apiKey.trim()) {
       alert("请先配置 API Key");
       return;
     }
     
-    const userMsg = inputValue.trim();
-    const newUserMessage: Message = { id: Date.now().toString(), role: 'user', content: userMsg };
+    const newUserMessage: Message = { id: Date.now().toString(), role: 'user', content: displayMsg || userMsg };
     
     setMessages(prev => [...(prev || []), newUserMessage]);
-    setInputValue('');
+    if (!customMsg) setInputValue('');
 
     if (userMsg.length > 200 && (userMsg.includes('命盘') || userMsg.includes('文墨天机') || userMsg.includes('宫'))) {
       setActiveChartText(userMsg);
     }
 
     await streamChat(userMsg);
+  };
+
+  const handleCalculateLimit = async () => {
+    if (!activeChartText || (selectedDecadeIndex === null && selectedYear === null)) return;
+    
+    try {
+      let clean = activeChartText.trim();
+      if (!clean.startsWith('{')) clean = clean.match(/\{[\s\S]*\}/)?.[0] || '';
+      const chartObj = JSON.parse(clean);
+      if (!chartObj?.rawParams) return;
+
+      const astrolabe = astro.bySolar(chartObj.rawParams.birthday, chartObj.rawParams.birthTime, chartObj.rawParams.gender, true, 'zh-CN');
+      
+      let focusTitle = "";
+      let focusStem = "";
+      let focusBranch = "";
+      let ageRange = "";
+
+      if (selectedYear !== null) {
+        const birthLunarYear = astrolabe.rawDates.lunarDate.lunarYear;
+        const age = selectedYear - birthLunarYear + 1;
+        const gz = getYearGanZhi(selectedYear);
+        focusTitle = `${selectedYear}年 ${gz}流年`;
+        focusStem = gz[0];
+        focusBranch = gz[1];
+        ageRange = `${age}`;
+      } else if (selectedDecadeIndex !== null) {
+        const decades = astrolabe.palaces.map((p, idx) => ({ ...p.decadal, palaceIndex: idx, name: p.name })).sort((a,b) => a.range[0] - b.range[0]);
+        const d = decades[selectedDecadeIndex];
+        focusTitle = `${d.range[0]}-${d.range[1]}岁 ${d.heavenlyStem}${d.earthlyBranch}大限`;
+        focusStem = d.heavenlyStem;
+        focusBranch = d.earthlyBranch;
+        ageRange = `${d.range[0]}-${d.range[1]}`;
+      }
+
+      // 1. 定位叠宫关系
+      const natalPalace = astrolabe.palaces.find(p => p.earthlyBranch === focusBranch);
+      const natalPalaceName = natalPalace ? natalPalace.name : "未知宫位";
+
+      // 2. 提取运限四化
+      const siHua = SI_HUA_MAP[focusStem] || "未知四化";
+
+      // 3. 提取宫内星曜
+      const stars = natalPalace ? [
+        ...natalPalace.majorStars.map((s: any) => s.name),
+        ...natalPalace.minorStars.map((s: any) => s.name),
+        ...natalPalace.adjectiveStars.map((s: any) => s.name)
+      ].join('、') : "无";
+
+      // 4. 精简原局数据
+      const baseData = {
+        basicInfo: {
+          gender: astrolabe.gender,
+          lunarDate: astrolabe.lunarDate.toString(),
+          fiveElementsClass: astrolabe.fiveElementsClass,
+          soul: astrolabe.soul,
+          body: astrolabe.body
+        },
+        palaces: astrolabe.palaces.map(p => ({
+          name: p.name,
+          branch: p.earthlyBranch,
+          stem: p.heavenlyStem,
+          stars: [
+            ...p.majorStars.map((s: any) => s.name),
+            ...p.minorStars.map((s: any) => s.name),
+            ...p.adjectiveStars.map((s: any) => s.name)
+          ]
+        }))
+      };
+
+      const prompt = `[系统指令：运限精准推算]
+【当前焦点】：推算 ${ageRange}岁 ${focusTitle}
+【叠宫关系】：此运限命宫，重叠本命【${natalPalaceName}】
+【运限四化】：${focusStem}干引发：${siHua}
+【原局参考】：${JSON.stringify(baseData)}
+
+用户需求：请重点推算该运限的运势吉凶与注意事项。`;
+
+      const displayMsg = `帮我推算 ${ageRange}岁 ${focusTitle} 运势`;
+      
+      await handleSendMessage(prompt, displayMsg);
+
+    } catch (e) {
+      console.error("Calculate Limit Error:", e);
+      alert("推算失败，请检查数据格式");
+    }
   };
 
   const handleConfirmFuel = () => {
@@ -633,7 +768,7 @@ export default function ChatRoom() {
                                       birthTime={obj.rawParams.birthTime}
                                       birthdayType={obj.rawParams.birthdayType}
                                       gender={obj.rawParams.gender}
-                                      horoscopeDate={focusDate}
+                                      horoscopeDate={(selectedDecadeIndex !== null || selectedYear !== null) ? focusDate : undefined}
                                       horoscopeHour={new Date().getHours()}
                                     />
                                   </div>
@@ -872,6 +1007,25 @@ export default function ChatRoom() {
 
         {/* Bottom: Input Area */}
         <div className="p-4 bg-zinc-950/50 border-t border-zinc-800">
+          {/* 快捷主题按钮 */}
+          <div className="flex gap-2 overflow-x-auto pb-3 custom-scrollbar no-scrollbar">
+            {[
+              { label: '今年财运', q: '请帮我重点推算今年的财运状况，有哪些机会或风险？' },
+              { label: '性格格局', q: '请详细分析我的性格特质、先天格局以及核心优劣势。' },
+              { label: '感情缘分', q: '我想了解我的感情运势，包括正缘特征或近期的感情走向。' },
+              { label: '事业变动', q: '最近在事业上有些迷茫，请分析我的职业发展方向与变动时机。' },
+              { label: '健康风险', q: '请提醒我需要注意的健康隐患或身体薄弱环节。' }
+            ].map((theme, i) => (
+              <button
+                key={i}
+                onClick={() => handleSendMessage(theme.q)}
+                className="px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-full text-[11px] text-zinc-400 hover:text-emerald-400 hover:border-emerald-500/50 transition-all whitespace-nowrap"
+              >
+                {theme.label}
+              </button>
+            ))}
+          </div>
+
           <div className="flex gap-3">
             <input
               type="text"
