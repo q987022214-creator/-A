@@ -1,11 +1,12 @@
 import * as React from 'react';
 import { Component, useState, useRef, useEffect, Suspense } from 'react';
-import { Send, Play, Loader2, Check, X, Bot, User, Trash2, Save, FolderOpen } from 'lucide-react';
+import { Send, Play, Loader2, Check, X, Bot, User, Trash2, Save, FolderOpen, LayoutDashboard, Compass } from 'lucide-react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { parseWenMoTianJiToJSON } from '../utils/ziweiParser';
 import { generateNativeChart } from '../utils/nativeChartGenerator';
 import { extractAndSaveMemory } from '../utils/memoryExtractor';
 import { astro } from 'iztro'; // 用于计算时间轴
+import PalaceScoreTable from './PalaceScoreTable';
 
 // --- 🛡️ 防白屏核心：错误边界组件 ---
 class ErrorBoundary extends React.Component<any, any> {
@@ -76,6 +77,9 @@ export default function ChatRoom() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [activeChartText, setActiveChartText] = useLocalStorage<string | null>('ziwei_active_chart', null);
   
+  // ✅ 新增：左侧面板视图切换状态
+  const [leftPanelView, setLeftPanelView] = useState<'astrolabe' | 'score'>('astrolabe');
+  
   // ✅ 新增：时间机器状态
   const [focusDate, setFocusDate] = useState<Date>(new Date());
   const [selectedDecadeIndex, setSelectedDecadeIndex] = useState<number>(-1);
@@ -121,35 +125,29 @@ export default function ChatRoom() {
       };
 
       return (
-        <div className="bg-zinc-950 border-t border-zinc-800 p-3 flex flex-col gap-2 animate-in slide-in-from-bottom-4">
-          <div className="flex justify-between text-xs text-emerald-400 font-mono">
-            <span>⏳ 时空穿梭机</span>
-            <span>当前推演: {currentYear}年</span>
+        <div className="bg-zinc-950 border-t border-zinc-800 p-2 flex flex-col gap-1.5 animate-in slide-in-from-bottom-4 shrink-0 max-h-[25%]">
+          <div className="flex justify-between text-[10px] text-emerald-300 font-mono px-1">
+            <span className="flex items-center gap-1">⏳ 时空穿梭机</span>
+            <span>推演: {currentYear}年</span>
           </div>
           {/* 大限轨道 */}
-          <div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
+          <div className="flex gap-1.5 overflow-x-auto pb-1 custom-scrollbar px-1">
             {decades.map((d, idx) => {
               const startYear = birthLunarYear + d.range[0] - 1;
               const endYear = birthLunarYear + d.range[1] - 1;
               const isActive = currentYear >= startYear && currentYear <= endYear;
               return (
                 <button key={idx} 
-                  onClick={() => { 
-                    const startYear = birthLunarYear + d.range[0] - 1;
-                    const newDate = new Date(startYear, 6, 1);
-                    console.log("点击大限:", { idx, startYear, ageRange: d.range, newDate });
-                    setSelectedDecadeIndex(idx); 
-                    setFocusDate(newDate); 
-                  }}
-                  className={`px-3 py-1 rounded border text-xs min-w-[85px] flex-shrink-0 flex flex-col items-center ${isActive ? 'border-emerald-500 bg-emerald-900/30 text-emerald-400' : 'border-zinc-800 text-zinc-500'}`}>
+                  onClick={() => { setSelectedDecadeIndex(idx); setFocusDate(new Date(startYear, 6, 1)); }}
+                  className={`px-2 py-1 rounded border text-[10px] min-w-[70px] flex-shrink-0 flex flex-col items-center transition-all ${isActive ? 'border-emerald-400 bg-emerald-800/40 text-emerald-300' : 'border-zinc-700 text-zinc-300 hover:border-zinc-500 bg-zinc-900'}`}>
                   <div className="font-bold">{d.range[0]}-{d.range[1]}岁</div>
-                  <div className="text-[10px] opacity-80">{d.heavenlyStem}{d.earthlyBranch}{d.name}限</div>
+                  <div className="text-[9px] opacity-80">{d.heavenlyStem}{d.earthlyBranch}{d.name}</div>
                 </button>
               );
             })}
           </div>
           {/* 流年轨道 */}
-          <div className="grid grid-cols-5 sm:grid-cols-10 gap-1">
+          <div className="grid grid-cols-5 sm:grid-cols-10 gap-1 px-1">
              {(() => {
                const activeIdx = selectedDecadeIndex === -1 ? decades.findIndex(d => currentYear >= (birthLunarYear + d.range[0]-1) && currentYear <= (birthLunarYear + d.range[1]-1)) : selectedDecadeIndex;
                const d = decades[activeIdx];
@@ -159,10 +157,10 @@ export default function ChatRoom() {
                  const gz = getYearGanZhi(y);
                  return (
                    <button key={y} onClick={() => setFocusDate(new Date(y, 6, 1))}
-                     className={`h-12 rounded text-[10px] border flex flex-col items-center justify-center leading-tight transition-colors ${y === currentYear ? 'bg-emerald-600 text-white border-emerald-400' : 'bg-zinc-900 text-zinc-500 border-zinc-800 hover:border-zinc-600'}`}>
-                     <div className="font-mono opacity-60">{y}年</div>
-                     <div className="font-bold text-xs">{gz}</div>
-                     <div className="scale-90 opacity-80">{age}岁</div>
+                     className={`h-10 rounded text-[9px] border flex flex-col items-center justify-center leading-tight transition-all ${y === currentYear ? 'bg-emerald-500 text-white border-emerald-300 shadow-lg shadow-emerald-900/40' : 'bg-zinc-800 text-zinc-200 border-zinc-700 hover:border-zinc-500'}`}>
+                     <div className="font-mono opacity-60 text-[8px]">{y}</div>
+                     <div className="font-bold text-[10px]">{gz}</div>
+                     <div className="opacity-80">{age}岁</div>
                    </button>
                  );
                });
@@ -579,50 +577,91 @@ export default function ChatRoom() {
   return (
     <div className="flex flex-col xl:flex-row gap-4 h-full w-full overflow-hidden p-4 max-w-[1600px] mx-auto relative">
       {/* 左侧面板 */}
-      <div className="w-full xl:w-1/2 flex-shrink-0 bg-gray-50 dark:bg-gray-900 rounded-lg shadow-inner overflow-hidden flex flex-col border border-zinc-800 relative">
-        <div className="flex-1 overflow-auto flex justify-center items-start pt-4 relative min-h-[500px] xl:min-h-0">
-          {activeChartText ? (
-            <ErrorBoundary fallback={<div className="p-8 text-red-500 text-center">星盘组件渲染出错，请检查控制台</div>}>
-              <Suspense fallback={<div className="text-emerald-500 p-20 flex items-center gap-2"><Loader2 className="animate-spin"/>加载中...</div>}>
-                 {(() => {
-                    try {
-                      let clean = activeChartText;
-                      if (!clean.startsWith('{')) clean = clean.match(/\{[\s\S]*\}/)?.[0] || '{}';
-                      const obj = JSON.parse(clean);
-                      if (!obj.rawParams) return <div className="p-10 text-zinc-500 text-center mt-20">文本导入的旧数据不支持互动，请使用原生排盘</div>;
-                      
-                      const iztroKey = `iztro-${selectedDecadeIndex}-${focusDate.getTime()}`;
-                      
-                      return (
-                        <div className="relative transform scale-90 origin-top pb-10">
-                          <Iztrolabe 
-                            key={iztroKey}
-                            birthday={obj.rawParams.birthday}
-                            birthTime={obj.rawParams.birthTime}
-                            birthdayType={obj.rawParams.birthdayType}
-                            gender={obj.rawParams.gender}
-                            horoscopeDate={focusDate} // ✅ 绑定状态，流年随时间轴变动
-                            horoscopeHour={new Date().getHours()}
-                          />
-                        </div>
-                      );
-                    } catch(e) { return <div className="p-10 text-red-500">数据解析错误</div> }
-                 })()}
-              </Suspense>
-            </ErrorBoundary>
+      <div className="w-full lg:w-[60%] xl:w-[65%] h-full flex-shrink-0 bg-gray-50 dark:bg-gray-900 rounded-lg shadow-inner overflow-hidden flex flex-col border border-zinc-800 relative">
+        {/* Tab 控制器 */}
+        <div className="bg-zinc-950 border-b border-zinc-800 p-1 flex justify-center">
+          <div className="flex bg-zinc-900 rounded-lg p-0.5 w-full max-w-[280px] border border-zinc-800/50">
+            <button
+              onClick={() => setLeftPanelView('astrolabe')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1 text-[10px] font-medium rounded-md transition-all duration-200 ${
+                leftPanelView === 'astrolabe' 
+                  ? 'bg-[#2d313a] text-emerald-400 shadow-sm' 
+                  : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              <Compass size={12} />
+              命盘视图
+            </button>
+            <button
+              onClick={() => setLeftPanelView('score')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1 text-[10px] font-medium rounded-md transition-all duration-200 ${
+                leftPanelView === 'score' 
+                  ? 'bg-[#2d313a] text-emerald-400 shadow-sm' 
+                  : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              <LayoutDashboard size={12} />
+              量化分析
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 min-h-0 overflow-hidden flex flex-col relative">
+          {leftPanelView === 'astrolabe' ? (
+            <>
+              <div className="flex-1 min-h-0 w-full flex items-center justify-center p-0 overflow-hidden relative">
+                {activeChartText ? (
+                  <ErrorBoundary fallback={<div className="p-8 text-red-500 text-center">星盘组件渲染出错，请检查控制台</div>}>
+                    <Suspense fallback={<div className="text-emerald-500 p-20 flex items-center gap-2"><Loader2 className="animate-spin"/>加载中...</div>}>
+                       {(() => {
+                          try {
+                            let clean = activeChartText;
+                            if (!clean.startsWith('{')) clean = clean.match(/\{[\s\S]*\}/)?.[0] || '{}';
+                            const obj = JSON.parse(clean);
+                            if (!obj.rawParams) return <div className="p-10 text-zinc-500 text-center mt-20">文本导入的旧数据不支持互动，请使用原生排盘</div>;
+                            
+                            return (
+                              <div className="w-full h-full flex items-center justify-center overflow-hidden">
+                                <div className="relative w-full h-full flex items-center justify-center">
+                                  <div 
+                                    className="origin-center transform scale-[0.43] sm:scale-[0.55] md:scale-[0.68] lg:scale-[0.81] xl:scale-[0.89] transition-all duration-500 ease-in-out flex items-center justify-center"
+                                    style={{ width: '1000px', height: '1000px', minWidth: '1000px', minHeight: '1000px' }}
+                                  >
+                                    <Iztrolabe 
+                                      width={1000}
+                                      birthday={obj.rawParams.birthday}
+                                      birthTime={obj.rawParams.birthTime}
+                                      birthdayType={obj.rawParams.birthdayType}
+                                      gender={obj.rawParams.gender}
+                                      horoscopeDate={focusDate}
+                                      horoscopeHour={new Date().getHours()}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          } catch(e) { return <div className="p-10 text-red-500">数据解析错误</div> }
+                       })()}
+                    </Suspense>
+                  </ErrorBoundary>
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center text-zinc-500 gap-4">
+                    <span className="text-4xl">🌌</span>
+                    <p>请在右侧输入生辰</p>
+                  </div>
+                )}
+              </div>
+              {/* 插入时间机器面板 */}
+              {renderTimeMachine()}
+            </>
           ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center text-zinc-500 gap-4">
-              <span className="text-4xl">🌌</span>
-              <p>请在右侧输入生辰</p>
-            </div>
+            <PalaceScoreTable iztroData={activeChartText} />
           )}
         </div>
-        {/* 插入时间机器面板 */}
-        {renderTimeMachine()}
       </div>
 
       {/* Right Pane: Chat Interface */}
-      <div className="w-full xl:w-1/2 flex flex-col flex-1 min-w-0 bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden relative">
+      <div className="w-full lg:w-[40%] xl:w-[35%] flex flex-col flex-1 min-w-0 bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden relative">
         {/* Top: Chart Input */}
         <div className="bg-zinc-950/50 border-b border-zinc-800 p-4 relative z-[999] pointer-events-auto">
           <div className="flex items-center justify-between mb-4 relative z-[999] pointer-events-auto">
