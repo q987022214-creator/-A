@@ -472,7 +472,7 @@ export default function ChatRoom() {
     setMessages(prev => [...(prev || []), newUserMessage]);
     if (!customMsg) setInputValue('');
 
-    // 【核心修复】：排除隐式系统指令，防止后台自动拼接的 prompt 覆盖左侧 UI 的命盘状态
+    // 排除后台隐式系统指令，防止 UI 命盘被意外覆盖崩溃
     if (
       userMsg.length > 200 && 
       !userMsg.includes('[系统指令') && 
@@ -556,13 +556,14 @@ export default function ChatRoom() {
       const prompt = `[系统指令：运限精准推算]
 【当前焦点】：推算 ${ageRange}岁 ${focusTitle}
 【叠宫关系】：此运限命宫，重叠本命【${natalPalaceName}】
-【运限四化】：${focusStem}干引发：${siHua}
+【运限四化】：${focusStem}干引发「${siHua}」
+【宫内星曜】：${stars}
 【原局参考】：${JSON.stringify(baseData)}
 
-用户需求：请重点推算该运限的运势吉凶与注意事项。`;
+用户需求：请基于以上精准提取的四化与叠宫数据，重点推算该运限的运势吉凶与注意事项。`;
 
-      // 【重点修改】用格式化的文本在聊天界面展示提取结果
-      const displayMsg = `🔮 【发起运限精准推算】\n▶ 焦点：${ageRange}岁 ${focusTitle}\n▶ 叠宫：运限命宫 叠 本命【${natalPalaceName}】\n▶ 四化：${focusStem}干引发「${siHua}」\n▶ 星系：宫内包含 ${stars}\n\n(注：底层全盘 JSON 架构已静默打包附带，正在呼叫大模型推演...)`;
+      // 直接把组装好的硬核数据展示在聊天气泡中，让用户清楚看到提取结果
+      const displayMsg = `🔮 【发起运限精准推算】\n▶ 焦点：${ageRange}岁 ${focusTitle}\n▶ 叠宫：运限命宫 叠 本命【${natalPalaceName}】\n▶ 四化：${focusStem}干引发「${siHua}」\n▶ 星系：主宫包含 ${stars}\n\n(注：底层全盘 JSON 架构已静默打包附带，正在呼叫大模型推演...)`;
       
       await handleSendMessage(prompt, displayMsg);
 
@@ -773,10 +774,11 @@ export default function ChatRoom() {
                                       width={1000}
                                       birthday={obj.rawParams.birthday}
                                       birthTime={obj.rawParams.birthTime}
-                                      birthdayType={obj.rawParams.birthdayType}
+                                      birthdayType={obj.rawParams.birthdayType || 'solar'}
                                       gender={obj.rawParams.gender}
-                                      horoscopeDate={(selectedDecadeIndex !== null || selectedYear !== null) ? focusDate : undefined}
-                                      horoscopeHour={new Date().getHours()}
+                                      {...((selectedDecadeIndex !== null || selectedYear !== null) ? {
+                                        horoscopeDate: `${focusDate.getFullYear()}-${String(focusDate.getMonth() + 1).padStart(2, '0')}-${String(focusDate.getDate()).padStart(2, '0')}`
+                                      } : {})}
                                     />
                                   </div>
                                 </div>
