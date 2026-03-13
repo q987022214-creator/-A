@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { calculateChartScores, PalaceScore } from '../utils/scoreCalculator';
-import { ChevronDown, ChevronUp, Info, Trophy, AlertTriangle, Minus, Zap, Activity } from 'lucide-react';
+import { recognizePatterns } from '../utils/patternRecognizer'; // 新增引入
+import PatternDashboard from './PatternDashboard';
+import { ChevronDown, ChevronUp, Trophy, AlertTriangle, Minus, Zap, Activity } from 'lucide-react';
 
 interface PalaceScoreTableProps {
   iztroData: any;
@@ -9,6 +11,24 @@ interface PalaceScoreTableProps {
 export default function PalaceScoreTable({ iztroData }: PalaceScoreTableProps) {
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
+  // 第一管：先提取格局分析
+  const patterns = useMemo(() => {
+    try {
+      if (!iztroData) return [];
+      let data = iztroData;
+      if (typeof data === 'string') {
+         let clean = data.trim();
+         if (!clean.startsWith('{')) clean = clean.match(/\{[\s\S]*\}/)?.[0] || '{}';
+         data = JSON.parse(clean);
+      }
+      return recognizePatterns(data);
+    } catch (e) {
+      console.error("格局解析失败", e);
+      return [];
+    }
+  }, [iztroData]);
+
+  // 第二管：带着格局跑共振分数
   const scores = useMemo(() => {
     try {
       if (!iztroData) return [];
@@ -18,12 +38,13 @@ export default function PalaceScoreTable({ iztroData }: PalaceScoreTableProps) {
          if (!clean.startsWith('{')) clean = clean.match(/\{[\s\S]*\}/)?.[0] || '{}';
          data = JSON.parse(clean);
       }
-      return calculateChartScores(data);
+      // 🚀 核心：把 patterns 喂给分数计算器！
+      return calculateChartScores(data, patterns);
     } catch (e) {
       console.error("量化计算失败", e);
       return [];
     }
-  }, [iztroData]);
+  }, [iztroData, patterns]);
 
   if (!scores || scores.length === 0) {
     return (
@@ -198,6 +219,9 @@ export default function PalaceScoreTable({ iztroData }: PalaceScoreTableProps) {
       </div>
       
       <div className="flex flex-col gap-10 w-full max-w-4xl pb-20">
+        {/* 🚀 新增的格局仪表盘 🚀 */}
+        <PatternDashboard patterns={patterns} />
+        
         {/* Strong Palaces Section */}
         <section className="flex flex-col gap-4">
           <div className="flex items-center gap-3 px-2">
