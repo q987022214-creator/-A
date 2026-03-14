@@ -5,6 +5,7 @@ import { useLocalStorage } from '../hooks/useLocalStorage';
 import { parseWenMoTianJiToJSON } from '../utils/ziweiParser';
 import { generateNativeChart } from '../utils/nativeChartGenerator';
 import { extractAndSaveMemory } from '../utils/memoryExtractor';
+import { buildAIPayload, DynamicContext } from '../utils/aiPromptBuilder';
 import { astro } from 'iztro'; // 用于计算时间轴
 import PalaceScoreTable from './PalaceScoreTable';
 
@@ -280,8 +281,62 @@ export default function ChatRoom() {
       if (activeChartText) {
         if (activeChartText.includes('【命盘B')) {
           systemPrompt = "【当前处于双人合盘（Synastry）分析模式】\n你收到了两个命盘的数据。请绝对遵循以下合盘分析法则：\n1. 核心交叉看盘：必须对比双方的【命宫】（性格匹配度）、【夫妻宫】（对伴侣的期望与对待关系）、【财帛/官禄宫】（事业财富的协同或消耗）。\n2. 寻找化学反应：分析一方的生年四化是否飞入另一方的关键宫位（如A的化禄入B的财帛，主A旺B财）。\n3. 输出要求：不要单独解盘，必须句句扣紧“两人在一起会怎样”。重点输出相处模式、感情雷区、财富协同建议，以及如何化解两人性格中的结构性矛盾。\n\n" + systemPrompt;
+          systemPrompt += `\n\n【当前正在分析的全局命盘数据（绝对不可忽略细节与杂曜）】：\n${activeChartText}`;
+        } else {
+          // 尝试使用 buildAIPayload 组装结构化数据
+          try {
+            let clean = activeChartText.trim();
+            if (!clean.startsWith('{')) clean = clean.match(/\{[\s\S]*\}/)?.[0] || '';
+            const chartObj = JSON.parse(clean);
+            
+            if (chartObj?.rawParams) {
+              const astrolabe = astro.bySolar(chartObj.rawParams.birthday, chartObj.rawParams.birthTime, chartObj.rawParams.gender, true, 'zh-CN');
+              
+              // 计算当前时间机器所指的运限上下文
+              const horoscope = astrolabe.horoscope(focusDate);
+              const decades = astrolabe.palaces.map((p, idx) => ({ ...p.decadal, palaceIndex: idx, name: p.name })).sort((a,b) => a.range[0] - b.range[0]);
+              
+              let decadeData: DynamicContext | undefined = undefined;
+              let yearData: DynamicContext | undefined = undefined;
+
+              if (horoscope.decadal) {
+                const d = horoscope.decadal;
+                const mapping: Record<string, string> = {};
+                (horoscope as any).palaces.forEach((p: any) => {
+                  if (p.decadal.name) mapping[p.decadal.name] = p.earthlyBranch;
+                });
+                const currentDecade = decades.find(dec => dec.heavenlyStem === d.heavenlyStem && dec.earthlyBranch === d.earthlyBranch);
+                decadeData = {
+                  timeLabel: `当前大限 (${currentDecade?.range[0]}-${currentDecade?.range[1]}岁)`,
+                  ganZhi: `${d.heavenlyStem}${d.earthlyBranch}`,
+                  sihua: SI_HUA_MAP[d.heavenlyStem] || "未知",
+                  mapping
+                };
+              }
+
+              if (horoscope.yearly) {
+                const y = horoscope.yearly;
+                const mapping: Record<string, string> = {};
+                (horoscope as any).palaces.forEach((p: any) => {
+                  if (p.yearly.name) mapping[p.yearly.name] = p.earthlyBranch;
+                });
+                yearData = {
+                  timeLabel: `${focusDate.getFullYear()}年流年`,
+                  ganZhi: `${y.heavenlyStem}${y.earthlyBranch}`,
+                  sihua: SI_HUA_MAP[y.heavenlyStem] || "未知",
+                  mapping
+                };
+              }
+
+              const aiPayload = buildAIPayload(astrolabe, decadeData, yearData);
+              systemPrompt += `\n\n【全息命盘结构化数据包】：\n${JSON.stringify(aiPayload, null, 2)}`;
+            } else {
+              systemPrompt += `\n\n【当前正在分析的全局命盘数据】：\n${activeChartText}`;
+            }
+          } catch (e) {
+            systemPrompt += `\n\n【当前正在分析的全局命盘数据】：\n${activeChartText}`;
+          }
         }
-        systemPrompt += `\n\n【当前正在分析的全局命盘数据（绝对不可忽略细节与杂曜）】：\n${activeChartText}`;
 
         // 尝试注入记忆
         try {
@@ -496,74 +551,63 @@ export default function ChatRoom() {
 
       const astrolabe = astro.bySolar(chartObj.rawParams.birthday, chartObj.rawParams.birthTime, chartObj.rawParams.gender, true, 'zh-CN');
       
-      let focusTitle = "";
-      let focusStem = "";
-      let focusBranch = "";
-      let ageRange = "";
+      // 1. 获取运限全息数据
+      const horoscope = astrolabe.horoscope(focusDate);
+      const decades = astrolabe.palaces.map((p, idx) => ({ ...p.decadal, palaceIndex: idx, name: p.name })).sort((a,b) => a.range[0] - b.range[0]);
+      
+      let decadeData: DynamicContext | undefined = undefined;
+      let yearData: DynamicContext | undefined = undefined;
 
-      if (selectedYear !== null) {
-        const birthLunarYear = astrolabe.rawDates.lunarDate.lunarYear;
-        const age = selectedYear - birthLunarYear + 1;
-        const gz = getYearGanZhi(selectedYear);
-        focusTitle = `${selectedYear}年 ${gz}流年`;
-        focusStem = gz[0];
-        focusBranch = gz[1];
-        ageRange = `${age}`;
-      } else if (selectedDecadeIndex !== null) {
-        const decades = astrolabe.palaces.map((p, idx) => ({ ...p.decadal, palaceIndex: idx, name: p.name })).sort((a,b) => a.range[0] - b.range[0]);
-        const d = decades[selectedDecadeIndex];
-        focusTitle = `${d.range[0]}-${d.range[1]}岁 ${d.heavenlyStem}${d.earthlyBranch}大限`;
-        focusStem = d.heavenlyStem;
-        focusBranch = d.earthlyBranch;
-        ageRange = `${d.range[0]}-${d.range[1]}`;
+      // 组装大限数据
+      if (horoscope.decadal) {
+        const d = horoscope.decadal;
+        const mapping: Record<string, string> = {};
+        (horoscope as any).palaces.forEach((p: any) => {
+          if (p.decadal.name) mapping[p.decadal.name] = p.earthlyBranch;
+        });
+        
+        // 寻找当前大限的年龄范围
+        const currentDecade = decades.find(dec => dec.heavenlyStem === d.heavenlyStem && dec.earthlyBranch === d.earthlyBranch);
+        const rangeStr = currentDecade ? `(${currentDecade.range[0]}-${currentDecade.range[1]}岁)` : "";
+
+        decadeData = {
+          timeLabel: `第${selectedDecadeIndex !== null ? selectedDecadeIndex + 1 : '?'}大限 ${rangeStr}`,
+          ganZhi: `${d.heavenlyStem}${d.earthlyBranch}`,
+          sihua: SI_HUA_MAP[d.heavenlyStem] || "未知",
+          mapping
+        };
       }
 
-      // 1. 定位叠宫关系
-      const natalPalace = astrolabe.palaces.find(p => p.earthlyBranch === focusBranch);
-      const natalPalaceName = natalPalace ? natalPalace.name : "未知宫位";
+      // 组装流年数据
+      if (selectedYear !== null && horoscope.yearly) {
+        const y = horoscope.yearly;
+        const mapping: Record<string, string> = {};
+        (horoscope as any).palaces.forEach((p: any) => {
+          if (p.yearly.name) mapping[p.yearly.name] = p.earthlyBranch;
+        });
 
-      // 2. 提取运限四化
-      const siHua = SI_HUA_MAP[focusStem] || "未知四化";
+        yearData = {
+          timeLabel: `${selectedYear}年流年`,
+          ganZhi: `${y.heavenlyStem}${y.earthlyBranch}`,
+          sihua: SI_HUA_MAP[y.heavenlyStem] || "未知",
+          mapping
+        };
+      }
 
-      // 3. 提取宫内星曜
-      const stars = natalPalace ? [
-        ...natalPalace.majorStars.map((s: any) => s.name),
-        ...natalPalace.minorStars.map((s: any) => s.name),
-        ...natalPalace.adjectiveStars.map((s: any) => s.name)
-      ].join('、') : "无";
+      // 2. 调用引擎组装 Payload
+      const aiPayload = buildAIPayload(astrolabe, decadeData, yearData);
 
-      // 4. 精简原局数据
-      const baseData = {
-        basicInfo: {
-          gender: astrolabe.gender,
-          lunarDate: astrolabe.lunarDate.toString(),
-          fiveElementsClass: astrolabe.fiveElementsClass,
-          soul: astrolabe.soul,
-          body: astrolabe.body
-        },
-        palaces: astrolabe.palaces.map(p => ({
-          name: p.name,
-          branch: p.earthlyBranch,
-          stem: p.heavenlyStem,
-          stars: [
-            ...p.majorStars.map((s: any) => s.name),
-            ...p.minorStars.map((s: any) => s.name),
-            ...p.adjectiveStars.map((s: any) => s.name)
-          ]
-        }))
-      };
-
+      // 3. 构建 Prompt
+      const focusTitle = selectedYear !== null ? `${selectedYear}年流年` : decadeData?.timeLabel;
       const prompt = `[系统指令：运限精准推算]
-【当前焦点】：推算 ${ageRange}岁 ${focusTitle}
-【叠宫关系】：此运限命宫，重叠本命【${natalPalaceName}】
-【运限四化】：${focusStem}干引发「${siHua}」
-【宫内星曜】：${stars}
-【原局参考】：${JSON.stringify(baseData)}
+【当前焦点】：推算 ${focusTitle}
+【全息数据包】：
+${JSON.stringify(aiPayload, null, 2)}
 
-用户需求：请基于以上精准提取的四化与叠宫数据，重点推算该运限的运势吉凶与注意事项。`;
+用户需求：请基于以上【三盘叠影】数据，重点推算该运限的运势吉凶与注意事项。`;
 
-      // 直接把组装好的硬核数据展示在聊天气泡中，让用户清楚看到提取结果
-      const displayMsg = `🔮 【发起运限精准推算】\n▶ 焦点：${ageRange}岁 ${focusTitle}\n▶ 叠宫：运限命宫 叠 本命【${natalPalaceName}】\n▶ 四化：${focusStem}干引发「${siHua}」\n▶ 星系：主宫包含 ${stars}\n\n(注：底层全盘 JSON 架构已静默打包附带，正在呼叫大模型推演...)`;
+      // 4. 构建展示消息
+      const displayMsg = `🔮 【发起运限精准推算】\n▶ 焦点：${focusTitle}\n▶ 模式：三盘叠影全息分析\n\n(注：底层数据已通过 AI 引擎清洗，正在呼叫大模型推演...)`;
       
       await handleSendMessage(prompt, displayMsg);
 
