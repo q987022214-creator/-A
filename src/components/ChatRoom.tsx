@@ -8,6 +8,7 @@ import { extractAndSaveMemory } from '../utils/memoryExtractor';
 import { buildAIPayload, DynamicContext } from '../utils/aiPromptBuilder';
 import { astro } from 'iztro'; // 用于计算时间轴
 import PalaceScoreTable from './PalaceScoreTable';
+import { ChatBubble } from './ChatBubble';
 
 // --- 🛡️ 防白屏核心：错误边界组件 ---
 class ErrorBoundary extends React.Component<any, any> {
@@ -46,6 +47,7 @@ interface Message {
   role: 'user' | 'ai';
   content: string;
   isError?: boolean;
+  payload?: string;
 }
 
 interface ExtractedFuel {
@@ -514,7 +516,7 @@ export default function ChatRoom() {
     }
   };
 
-  const handleSendMessage = async (customMsg?: string, displayMsg?: string) => {
+  const handleSendMessage = async (customMsg?: string, displayMsg?: string, payload?: string) => {
     const userMsg = customMsg || inputValue.trim();
     if (!userMsg) return;
     if (!apiSettings.apiKey.trim()) {
@@ -522,7 +524,12 @@ export default function ChatRoom() {
       return;
     }
     
-    const newUserMessage: Message = { id: Date.now().toString(), role: 'user', content: displayMsg || userMsg };
+    const newUserMessage: Message = { 
+      id: Date.now().toString(), 
+      role: 'user', 
+      content: displayMsg || userMsg,
+      payload: payload
+    };
     
     setMessages(prev => [...(prev || []), newUserMessage]);
     if (!customMsg) setInputValue('');
@@ -596,20 +603,21 @@ export default function ChatRoom() {
 
       // 2. 调用引擎组装 Payload
       const aiPayload = buildAIPayload(astrolabe, decadeData, yearData);
+      const payloadStr = JSON.stringify(aiPayload, null, 2);
 
       // 3. 构建 Prompt
       const focusTitle = selectedYear !== null ? `${selectedYear}年流年` : decadeData?.timeLabel;
       const prompt = `[系统指令：运限精准推算]
 【当前焦点】：推算 ${focusTitle}
 【全息数据包】：
-${JSON.stringify(aiPayload, null, 2)}
+${payloadStr}
 
 用户需求：请基于以上【三盘叠影】数据，重点推算该运限的运势吉凶与注意事项。`;
 
       // 4. 构建展示消息
       const displayMsg = `🔮 【发起运限精准推算】\n▶ 焦点：${focusTitle}\n▶ 模式：三盘叠影全息分析\n\n(注：底层数据已通过 AI 引擎清洗，正在呼叫大模型推演...)`;
       
-      await handleSendMessage(prompt, displayMsg);
+      await handleSendMessage(prompt, displayMsg, payloadStr);
 
     } catch (e) {
       console.error("Calculate Limit Error:", e);
@@ -1007,53 +1015,22 @@ ${JSON.stringify(aiPayload, null, 2)}
           </div>
         )}
         {/* Middle: Chat Messages */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-zinc-950/30">
+        <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-zinc-950/30">
           {(messages || []).map((msg, index) => (
-            <div key={msg.id} className={`flex gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-                msg.role === 'user' ? 'bg-zinc-800 text-zinc-400' : 'bg-emerald-900/50 text-emerald-400 border border-emerald-800'
-              }`}>
-                {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
-              </div>
-              <div className={`max-w-[80%] flex flex-col gap-1 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                <div className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-                  msg.role === 'user' 
-                    ? 'bg-zinc-800 text-zinc-200 rounded-tr-sm' 
-                    : msg.isError 
-                      ? 'bg-red-500/10 border border-red-500/20 text-red-400 rounded-tl-sm'
-                      : 'bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-tl-sm'
-                }`}>
-                  {msg.content ? (
-                    <div className="whitespace-pre-wrap">{msg.content}</div>
-                  ) : (
-                    msg.role === 'ai' && !msg.isError && (
-                      <div className="flex items-center gap-2 text-emerald-500">
-                        <Loader2 size={16} className="animate-spin" />
-                        <span className="text-xs animate-pulse">思考中...</span>
-                      </div>
-                    )
-                  )}
-                </div>
-                {msg.role === 'user' && (
-                  <button 
-                    onClick={() => {
-                      let aiText = '无';
-                      for (let i = index - 1; i >= 0; i--) {
-                        if (messages[i].role === 'ai') {
-                          aiText = messages[i].content;
-                          break;
-                        }
-                      }
-                      ExtractFuel(msg.content, aiText);
-                    }}
-                    className="text-[10px] text-zinc-500 hover:text-emerald-400 flex items-center gap-1 mt-1 transition-colors"
-                    title="提炼为规则"
-                  >
-                    💡 提炼为规则
-                  </button>
-                )}
-              </div>
-            </div>
+            <ChatBubble 
+              key={msg.id} 
+              message={msg} 
+              onExtractFuel={msg.role === 'user' ? () => {
+                let aiText = '无';
+                for (let i = index - 1; i >= 0; i--) {
+                  if (messages[i].role === 'ai') {
+                    aiText = messages[i].content;
+                    break;
+                  }
+                }
+                ExtractFuel(msg.content, aiText);
+              } : undefined}
+            />
           ))}
           <div ref={messagesEndRef} />
         </div>

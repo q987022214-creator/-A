@@ -1,0 +1,90 @@
+import React, { useState } from 'react';
+import { ChevronDown, ChevronRight, Database, User, Bot, Loader2 } from 'lucide-react';
+
+interface Message {
+  id: string;
+  role: 'user' | 'ai';
+  content: string;
+  isError?: boolean;
+  payload?: string;
+}
+
+interface ChatBubbleProps {
+  message: Message;
+  onExtractFuel?: () => void;
+}
+
+export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, onExtractFuel }) => {
+  const isUser = message.role === 'user';
+  const [isPayloadOpen, setIsPayloadOpen] = useState(false);
+
+  return (
+    <div className={`flex gap-4 ${isUser ? 'flex-row-reverse' : ''}`}>
+      {/* Avatar */}
+      <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+        isUser ? 'bg-zinc-800 text-zinc-400' : 'bg-emerald-900/50 text-emerald-400 border border-emerald-800'
+      }`}>
+        {isUser ? <User size={16} /> : <Bot size={16} />}
+      </div>
+
+      {/* Message Content */}
+      <div className={`max-w-[80%] flex flex-col gap-1 ${isUser ? 'items-end' : 'items-start'}`}>
+        <div className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+          isUser 
+            ? 'bg-zinc-800 text-zinc-200 rounded-tr-sm' 
+            : message.isError 
+              ? 'bg-red-500/10 border border-red-500/20 text-red-400 rounded-tl-sm'
+              : 'bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-tl-sm'
+        }`}>
+          {message.content ? (
+            <div className="whitespace-pre-wrap">{message.content}</div>
+          ) : (
+            message.role === 'ai' && !message.isError && (
+              <div className="flex items-center gap-2 text-emerald-500">
+                <Loader2 size={16} className="animate-spin" />
+                <span className="text-xs animate-pulse">思考中...</span>
+              </div>
+            )
+          )}
+
+          {/* 如果有底层数据包，渲染折叠区域 */}
+          {message.payload && (
+            <div className="mt-3 border border-emerald-500/20 rounded-lg overflow-hidden bg-black/40">
+              {/* 点击展开/折叠的头部 */}
+              <button 
+                onClick={() => setIsPayloadOpen(!isPayloadOpen)}
+                className="w-full flex items-center justify-between p-2 text-[10px] text-emerald-400/80 hover:bg-emerald-500/10 transition-colors"
+              >
+                <div className="flex items-center gap-2 font-mono">
+                  <Database size={12} />
+                  <span>AI 推演数据包 (Payload)</span>
+                </div>
+                {isPayloadOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </button>
+
+              {/* 折叠的内容区 */}
+              {isPayloadOpen && (
+                <div className="p-3 border-t border-emerald-500/20 bg-black">
+                  <pre className="text-[9px] font-mono text-zinc-400 overflow-x-auto custom-scrollbar max-h-64">
+                    <code>{message.payload}</code>
+                  </pre>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Extract Fuel Button for User Messages */}
+        {isUser && onExtractFuel && (
+          <button 
+            onClick={onExtractFuel}
+            className="text-[10px] text-zinc-500 hover:text-emerald-400 flex items-center gap-1 mt-1 transition-colors"
+            title="提炼为规则"
+          >
+            💡 提炼为规则
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
