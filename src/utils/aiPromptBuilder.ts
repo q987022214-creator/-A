@@ -6,18 +6,16 @@ export interface DynamicContext {
   mapping: Record<string, string>; 
 }
 
-// 辅助：从原局中寻找某颗星曜落在哪个地支宫位
+// 🚀 核心修复：兼容文本导入和原生排盘的找星逻辑
 const findStarLoc = (starName: string, palaces: any[]) => {
   for (const p of palaces) {
-    const allStars = [...(p.majorStars||[]), ...(p.minorStars||[]), ...(p.adjectiveStars||[])];
-    if (allStars.some((s: any) => s.name === starName)) {
+    if (p.stars && p.stars.some((s: string) => s.includes(starName))) {
       return p.earthlyBranch + "宫";
     }
   }
   return "未知";
 };
 
-// 辅助：根据干支推算动态吉煞与四化
 const getDynamicStars = (ganZhi: string) => {
   if (!ganZhi || ganZhi.length < 2) return null;
   const stem = ganZhi.charAt(0);
@@ -54,38 +52,37 @@ const getDynamicStars = (ganZhi: string) => {
   };
 };
 
-/**
- * 构建极致压缩、0幻觉的三盘全息数据包
- */
 export function buildAIPayload(fullIztroData: any, decadeContext?: DynamicContext, yearContext?: DynamicContext) {
   if (!fullIztroData || !fullIztroData.palaces) return null;
 
-  // 1. 映射字典：为了把大限流年身份直接焊死在地支上
   const inverseDecade = decadeContext ? Object.fromEntries(Object.entries(decadeContext.mapping).map(([k, v]) => [v, k])) : {};
   const inverseYear = yearContext ? Object.fromEntries(Object.entries(yearContext.mapping).map(([k, v]) => [v, k])) : {};
 
   const baseChart: Record<string, any> = {};
+  
+  // 🚀 核心修复：兼容不同来源的基本信息
   const info = fullIztroData.basicInfo || {};
-  baseChart["基本信息"] = `${info.性别||''}, ${info.五行局||''}, 命主${info.命主||''}, 身主${info.身主||''}`;
+  const gender = info.性别 || info.gender || '';
+  const wuxing = info.五行局 || info.五行局数 || info.fiveElementsClass || '';
+  const mz = info.命主 || info.soul || '';
+  const sz = info.身主 || info.body || '';
+  baseChart["基本信息"] = `${gender}, ${wuxing}, 命主${mz}, 身主${sz}`;
 
-  // 2. 榨干水分：重构原局 12 宫
   fullIztroData.palaces.forEach((p: any) => {
     const branch = p.earthlyBranch;
+    const allStars = p.stars || [];
     
-    // 扁平化星曜
-    const allStars = [];
-    if (p.majorStars) p.majorStars.forEach((s:any) => allStars.push(`${s.name}${s.brightness ? `(${s.brightness})` : ''}${s.mutagen ? `[化${s.mutagen}]` : ''}`));
-    if (p.minorStars) p.minorStars.forEach((s:any) => allStars.push(`${s.name}${s.brightness ? `(${s.brightness})` : ''}${s.mutagen ? `[化${s.mutagen}]` : ''}`));
-    if (p.adjectiveStars) p.adjectiveStars.forEach((s:any) => allStars.push(`${s.name}`));
-    
-    // 扁平化神煞
+    // 🚀 核心修复：安全提取神煞
     const shensha = [];
-    if (p.changsheng12) shensha.push(`${p.changsheng12}(长生)`);
-    if (p.boshi12) shensha.push(`${p.boshi12}(博士)`);
-    if (p.jiangqian12) shensha.push(`${p.jiangqian12}(将前)`);
-    if (p.suiqian12) shensha.push(`${p.suiqian12}(岁前)`);
+    const cs = typeof p.changsheng12 === 'string' ? p.changsheng12 : (p.changsheng12?.name || '');
+    if (cs) shensha.push(`${cs}(长生)`);
+    const bs = typeof p.boshi12 === 'string' ? p.boshi12 : (p.boshi12?.name || '');
+    if (bs) shensha.push(`${bs}(博士)`);
+    const jq = typeof p.jiangqian12 === 'string' ? p.jiangqian12 : (p.jiangqian12?.name || '');
+    if (jq) shensha.push(`${jq}(将前)`);
+    const sq = typeof p.suiqian12 === 'string' ? p.suiqian12 : (p.suiqian12?.name || '');
+    if (sq) shensha.push(`${sq}(岁前)`);
 
-    // 动态组合重叠身份
     let identity = `【原局】${p.name}`;
     if (decadeContext && inverseDecade[branch]) identity += ` + 【大限】${inverseDecade[branch].replace('大限', '')}`;
     if (yearContext && inverseYear[branch]) identity += ` + 【流年】${inverseYear[branch].replace('流年', '')}`;
@@ -103,7 +100,6 @@ export function buildAIPayload(fullIztroData: any, decadeContext?: DynamicContex
     "BaseChart_十二地支物理坐标": baseChart
   };
 
-  // 3. 动态环境注入 (精准标出四化落点)
   if (decadeContext) {
     const dyn = getDynamicStars(decadeContext.ganZhi);
     if (dyn) {

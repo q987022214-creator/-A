@@ -5,6 +5,7 @@ import { Send, Play, Loader2, Check, X, Bot, User, Trash2, Save, FolderOpen, Lay
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { parseWenMoTianJiToJSON } from '../utils/ziweiParser';
 import { generateNativeChart } from '../utils/nativeChartGenerator';
+import { extractAndSaveMemory } from '../utils/memoryExtractor';
 import { buildAIPayload, DynamicContext } from '../utils/aiPromptBuilder';
 import { astro } from 'iztro';
 import PalaceScoreTable from './PalaceScoreTable';
@@ -64,13 +65,20 @@ export default function ChatRoom() {
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   useEffect(() => scrollToBottom(), [messages]);
 
+  const SI_HUA_MAP: Record<string, string> = {
+    '甲': '廉贞化禄、破军化权、武曲化科、太阳化忌', '乙': '天机化禄、天梁化权、紫微化科、太阴化忌',
+    '丙': '天同化禄、天机化权、文昌化科、廉贞化忌', '丁': '太阴化禄、天同化权、天机化科、巨门化忌',
+    '戊': '贪狼化禄、太阴化权、右弼化科、天机化忌', '己': '武曲化禄、贪狼化权、天梁化科、文曲化忌',
+    '庚': '太阳化禄、武曲化权、太阴化科、天同化忌', '辛': '巨门化禄、太阳化权、文曲化科、文昌化忌',
+    '壬': '天梁化禄、紫微化权、左辅化科、武曲化忌', '癸': '破军化禄、巨门化权、太阴化科、天同化忌',
+  };
+
   const getYearGanZhi = (year: number) => {
     const stems = "甲乙丙丁戊己庚辛壬癸"; const branches = "子丑寅卯辰巳午未申酉戌亥";
     const stemIdx = (year - 4) % 10; const branchIdx = (year - 4) % 12;
     return stems[stemIdx < 0 ? stemIdx + 10 : stemIdx] + branches[branchIdx < 0 ? branchIdx + 12 : branchIdx];
   };
 
-  // 🚀 核心流转引擎
   const streamChat = async (userPromptForAI: string, hasEmbeddedPayload: boolean = false) => {
     const aiMessageId = (Date.now() + 1).toString();
     setMessages(prev => [...(prev || []), { id: aiMessageId, role: 'ai', content: '' }]);
@@ -78,7 +86,6 @@ export default function ChatRoom() {
     const apiKey = apiSettings.apiKey.trim();
     const baseUrl = apiSettings.baseUrl.trim().replace(/\/+$/, '');
 
-    // 🌟 本地测试模式
     if (!apiKey || !baseUrl) {
       setTimeout(() => {
         setMessages(prev => (prev || []).map(msg => 
@@ -97,7 +104,7 @@ export default function ChatRoom() {
       if (activeChartText && !hasEmbeddedPayload) {
         try {
           const chartObj = JSON.parse(activeChartText);
-          const aiPayload = buildAIPayload(chartObj); // 单层原局解析
+          const aiPayload = buildAIPayload(chartObj); 
           systemPrompt += `\n\n【全息命盘结构化数据包(原局)】：\n${JSON.stringify(aiPayload, null, 2)}`;
         } catch(e) {
           systemPrompt += `\n\n【命盘基础数据】：\n${activeChartText}`;
@@ -160,7 +167,7 @@ export default function ChatRoom() {
       const pureJsonStr = JSON.stringify(parsedObj, null, 2);
       setActiveChartText(pureJsonStr); 
       
-      const aiPayload = buildAIPayload(parsedObj); // 生成极简原局
+      const aiPayload = buildAIPayload(parsedObj);
       const payloadStr = JSON.stringify(aiPayload, null, 2);
 
       const displayContent = `🔮 成功导入并解析排盘文本。请基于原局为我推算。`;
@@ -193,7 +200,7 @@ export default function ChatRoom() {
       const c = cases.find(c => c.id === selectedCaseIds[0]);
       if (c) {
         setActiveChartText(c.content); 
-        const aiPayload = buildAIPayload(JSON.parse(c.content)); // 极简单层原局
+        const aiPayload = buildAIPayload(JSON.parse(c.content)); 
         const payloadStr = JSON.stringify(aiPayload, null, 2);
         const displayContent = `🔮 载入命盘：${c.name}`;
         const promptToAI = `我已切换至命盘：${c.name}，请查收。`;
@@ -204,12 +211,11 @@ export default function ChatRoom() {
     setSelectedCaseIds([]);
   };
 
-  // ⏳ 提取动态维度的核心引擎 (1层/2层/3层 智能伸缩)
+  // 🚀🚀🚀 核心漏洞修复区：彻底打通 iztro 底盘管道 (修复 forEach 崩溃问题)
   const extractTimeLimitPayload = (targetDate: Date, overrideDecadeIndex: number | null = null) => {
     if (!activeChartText) return null;
     try {
       const chartObj = JSON.parse(activeChartText);
-      // 如果没有原生数据，只能输出单层原局
       if (!chartObj?.rawParams) return { payloadStr: JSON.stringify(buildAIPayload(chartObj), null, 2), focusTitle: '原局底盘' };
 
       const astrolabe = astro.bySolar(chartObj.rawParams.birthday, chartObj.rawParams.birthTime, chartObj.rawParams.gender, true, 'zh-CN');
@@ -219,12 +225,15 @@ export default function ChatRoom() {
       let yearData: DynamicContext | undefined = undefined;
       let focusTitle = `${targetDate.getFullYear()}年 流年`;
 
-      // 解析大限层 (2层)
-      if (horoscope.decadal && (horoscope.decadal as any).palaces) {
+      // 🚨 终极修复：直接遍历 astrolabe.palaces，绝不使用不存在的 horoscope.palaces
+      if (horoscope.decadal) {
         const d = horoscope.decadal;
         const mapping: Record<string, string> = {};
-        (d as any).palaces.forEach((palaceName: string, idx: number) => { 
-            mapping[`大限${palaceName}`] = astrolabe.palaces[idx].earthlyBranch; 
+        
+        astrolabe.palaces.forEach((p: any) => { 
+            if (p.decadal && p.decadal.name) {
+                mapping[`大限${p.decadal.name}`] = p.earthlyBranch; 
+            }
         });
         
         const decades = astrolabe.palaces.map(p => p.decadal);
@@ -242,14 +251,18 @@ export default function ChatRoom() {
         };
       }
 
-      // 解析流年层 (3层) - 只有用户真的点了年份，或者默认看今天时才加载
+      // 🚨 终极修复：流年映射也改为遍历 astrolabe.palaces
       if (overrideDecadeIndex === null || selectedYear !== null) {
-        if (horoscope.yearly && (horoscope.yearly as any).palaces) {
+        if (horoscope.yearly) {
           const y = horoscope.yearly;
           const mapping: Record<string, string> = {};
-          (y as any).palaces.forEach((palaceName: string, idx: number) => { 
-              mapping[`流年${palaceName}`] = astrolabe.palaces[idx].earthlyBranch; 
+          
+          astrolabe.palaces.forEach((p: any) => { 
+              if (p.yearly && p.yearly.name) {
+                  mapping[`流年${p.yearly.name}`] = p.earthlyBranch; 
+              }
           });
+          
           yearData = {
             timeLabel: `${targetDate.getFullYear()}年 流年`,
             ganZhi: `${y.heavenlyStem}${y.earthlyBranch}`,
@@ -259,15 +272,14 @@ export default function ChatRoom() {
         }
       }
 
-      // 组装最终全息对象
       const aiPayload = buildAIPayload(astrolabe, decadeData, yearData);
       return { payloadStr: JSON.stringify(aiPayload, null, 2), focusTitle };
     } catch (e) {
+      console.error("提取时空结构失败:", e);
       return null;
     }
   };
 
-  // 🎯 精准推算按钮
   const handleCalculateLimit = async () => {
     if (selectedDecadeIndex === null && selectedYear === null) return;
     const res = extractTimeLimitPayload(focusDate, selectedYear === null ? selectedDecadeIndex : null);
@@ -278,14 +290,12 @@ export default function ChatRoom() {
     await handleSendMessage(promptToAI, displayContent, res.payloadStr);
   };
 
-  // 🎯 快捷问答按钮
   const handleQuickQuestion = async (topic: string) => {
     if (!activeChartText) {
       handleSendMessage(`请帮我重点推测：${topic}`);
       return;
     }
     
-    // 如果没有选中特定的年份大限，默认拉取现在的流年(3层满血)
     const res = extractTimeLimitPayload(focusDate, selectedYear === null && selectedDecadeIndex !== null ? selectedDecadeIndex : null);
     if (!res) {
       handleSendMessage(`请帮我重点推测：${topic}`);
@@ -301,7 +311,7 @@ export default function ChatRoom() {
   const executeClearChat = () => {
     window.localStorage.removeItem('ziwei_chat_messages');
     window.localStorage.removeItem('ziwei_active_chart');
-    setMessages([{ id: Date.now().toString(), role: 'ai', content: '你好，我是紫微多维共振引擎。' }]);
+    setMessages([{ id: Date.now().toString(), role: 'ai', content: '你好，我是紫微多维共振引擎。您可以粘贴命盘给我。' }]);
     setActiveChartText('');
     setShowClearConfirm(false);
   };
