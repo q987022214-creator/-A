@@ -6,10 +6,16 @@ export interface DynamicContext {
   mapping: Record<string, string>; 
 }
 
-// 🚀 核心修复：兼容文本导入和原生排盘的找星逻辑
+// 🚀 核心修复1：双模式兼容找星逻辑 (绝对不再找不到四化落点)
 const findStarLoc = (starName: string, palaces: any[]) => {
   for (const p of palaces) {
+    // 模式A：本地缓存的 chartObj 格式
     if (p.stars && p.stars.some((s: string) => s.includes(starName))) {
+      return p.earthlyBranch + "宫";
+    }
+    // 模式B：iztro 底层原生 astrolabe 格式
+    const rawStars = [...(p.majorStars||[]), ...(p.minorStars||[]), ...(p.adjectiveStars||[])];
+    if (rawStars.some((s: any) => (typeof s === 'string' ? s.includes(starName) : s.name === starName))) {
       return p.earthlyBranch + "宫";
     }
   }
@@ -60,8 +66,8 @@ export function buildAIPayload(fullIztroData: any, decadeContext?: DynamicContex
 
   const baseChart: Record<string, any> = {};
   
-  // 🚀 核心修复：兼容不同来源的基本信息
-  const info = fullIztroData.basicInfo || {};
+  // 🚀 核心修复2：全能兼容不同版本的"基本信息"
+  const info = fullIztroData.basicInfo || fullIztroData;
   const gender = info.性别 || info.gender || '';
   const wuxing = info.五行局 || info.五行局数 || info.fiveElementsClass || '';
   const mz = info.命主 || info.soul || '';
@@ -70,9 +76,18 @@ export function buildAIPayload(fullIztroData: any, decadeContext?: DynamicContex
 
   fullIztroData.palaces.forEach((p: any) => {
     const branch = p.earthlyBranch;
-    const allStars = p.stars || [];
     
-    // 🚀 核心修复：安全提取神煞
+    // 🚀 核心修复3：双模式星曜提取 (告别全部无主星)
+    let allStars: string[] = [];
+    if (p.stars && p.stars.length > 0) {
+        allStars = p.stars; 
+    } else {
+        if (p.majorStars) p.majorStars.forEach((s:any) => allStars.push(`${s.name}${s.brightness ? `(${s.brightness})` : ''}${s.mutagen ? `[化${s.mutagen}]` : ''}`));
+        if (p.minorStars) p.minorStars.forEach((s:any) => allStars.push(`${s.name}${s.brightness ? `(${s.brightness})` : ''}${s.mutagen ? `[化${s.mutagen}]` : ''}`));
+        if (p.adjectiveStars) p.adjectiveStars.forEach((s:any) => allStars.push(typeof s === 'string' ? s : s.name));
+    }
+    
+    // 🚀 核心修复4：双模式神煞提取
     const shensha = [];
     const cs = typeof p.changsheng12 === 'string' ? p.changsheng12 : (p.changsheng12?.name || '');
     if (cs) shensha.push(`${cs}(长生)`);
