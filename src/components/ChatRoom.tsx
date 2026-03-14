@@ -1,41 +1,20 @@
 // src/components/ChatRoom.tsx
-import React, { useState, useRef, useEffect, Suspense, Component } from 'react';
+import * as React from 'react';
+import { Component, useState, useRef, useEffect, Suspense } from 'react';
 import { Send, Play, Loader2, Check, X, Bot, User, Trash2, Save, FolderOpen, LayoutDashboard, Compass, Target, Zap } from 'lucide-react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { parseWenMoTianJiToJSON } from '../utils/ziweiParser';
 import { generateNativeChart } from '../utils/nativeChartGenerator';
-import { extractAndSaveMemory } from '../utils/memoryExtractor';
 import { buildAIPayload, DynamicContext } from '../utils/aiPromptBuilder';
 import { astro } from 'iztro';
 import PalaceScoreTable from './PalaceScoreTable';
 import { ChatBubble } from './ChatBubble';
 
-interface ErrorBoundaryProps {
-  fallback: React.ReactNode;
-  children: React.ReactNode;
-}
-
-interface ErrorBoundaryState {
-  hasError: boolean;
-}
-
 class ErrorBoundary extends (Component as any) {
-  constructor(props: any) {
-    super(props);
-    this.state = { hasError: false };
-  }
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-  componentDidCatch(error: any, info: any) {
-    console.error("星盘组件崩溃:", error, info);
-  }
-  render() {
-    if (this.state.hasError) {
-      return this.props.fallback;
-    }
-    return this.props.children;
-  }
+  constructor(props: any) { super(props); this.state = { hasError: false }; }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(error: any, info: any) { console.error("星盘组件崩溃:", error, info); }
+  render() { if (this.state.hasError) return this.props.fallback; return this.props.children; }
 }
 
 const Iztrolabe = React.lazy(async () => {
@@ -64,16 +43,11 @@ export default function ChatRoom() {
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  
   const [activeChartText, setActiveChartText] = useLocalStorage<string | null>('ziwei_active_chart', null);
-  
   const [leftPanelView, setLeftPanelView] = useState<'astrolabe' | 'score'>('astrolabe');
   const [focusDate, setFocusDate] = useState<Date>(new Date());
   const [selectedDecadeIndex, setSelectedDecadeIndex] = useState<number | null>(null);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
-  
-  const [isExtracting, setIsExtracting] = useState(false);
-  const [pendingFuel, setPendingFuel] = useState<any>(null);
   const [cases, setCases] = useLocalStorage<any[]>('ziwei_cases', []);
   const [isCaseModalOpen, setIsCaseModalOpen] = useState(false);
   const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
@@ -82,24 +56,13 @@ export default function ChatRoom() {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showSavePrompt, setShowSavePrompt] = useState(false);
   const [tempChartName, setTempChartName] = useState("");
-  const [viewingChartContent, setViewingChartContent] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'native' | 'import'>('native');
   const [nativeGender, setNativeGender] = useState<'男' | '女'>('男');
   const [nativeDate, setNativeDate] = useState('');
   const [nativeTime, setNativeTime] = useState('子时');
-  const [pendingNativeData, setPendingNativeData] = useState<any>(null);
-  const [activeRule] = useLocalStorage<any>('ziwei_active_rule', null);
 
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   useEffect(() => scrollToBottom(), [messages]);
-
-  const SI_HUA_MAP: Record<string, string> = {
-    '甲': '廉贞化禄、破军化权、武曲化科、太阳化忌', '乙': '天机化禄、天梁化权、紫微化科、太阴化忌',
-    '丙': '天同化禄、天机化权、文昌化科、廉贞化忌', '丁': '太阴化禄、天同化权、天机化科、巨门化忌',
-    '戊': '贪狼化禄、太阴化权、右弼化科、天机化忌', '己': '武曲化禄、贪狼化权、天梁化科、文曲化忌',
-    '庚': '太阳化禄、武曲化权、太阴化科、天同化忌', '辛': '巨门化禄、太阳化权、文曲化科、文昌化忌',
-    '壬': '天梁化禄、紫微化权、左辅化科、武曲化忌', '癸': '破军化禄、巨门化权、太阴化科、天同化忌',
-  };
 
   const getYearGanZhi = (year: number) => {
     const stems = "甲乙丙丁戊己庚辛壬癸"; const branches = "子丑寅卯辰巳午未申酉戌亥";
@@ -115,33 +78,29 @@ export default function ChatRoom() {
     const apiKey = apiSettings.apiKey.trim();
     const baseUrl = apiSettings.baseUrl.trim().replace(/\/+$/, '');
 
-    // 🌟 本地测试模式：如果没有填 API Key，不要报错，直接返回测试文本
+    // 🌟 本地测试模式
     if (!apiKey || !baseUrl) {
       setTimeout(() => {
         setMessages(prev => (prev || []).map(msg => 
           msg.id === aiMessageId ? { 
             ...msg, 
-            content: "【本地测试模式】未检测到 API 密钥，大模型暂未启动。\n但底层的三盘叠影数据已成功打包！请点开您上一条消息的【▶ 后台隐式推演数据包 (Payload)】进行格式检验与复制。" 
+            content: "【本地测试模式】未检测到 API 密钥，大模型暂未启动。\n但底层的极简压缩三盘数据已成功打包！请点开您上一条消息的【▶ 后台隐式推演数据包 (Payload)】进行检验。" 
           } : msg
         ));
-      }, 800); // 模拟一下思考的延迟
+      }, 800);
       return;
     }
     
     try {
-      let systemPrompt = "你是一个名为'紫微多维共振引擎'的顶尖命理 AI。请严格使用【三盘叠影法】进行推断，必须以地支为物理坐标对齐原局、大限、流年。语言精炼通透，打破宿命论。";
+      let systemPrompt = "你是一个名为'紫微多维共振引擎'的顶尖命理 AI。请严格使用【三盘叠影法】进行推断。";
 
       if (activeChartText && !hasEmbeddedPayload) {
-        if (activeChartText.includes('【命盘B')) {
-          systemPrompt += `\n\n【双人合盘数据】：\n${activeChartText}`;
-        } else {
-          try {
-            const chartObj = JSON.parse(activeChartText);
-            const aiPayload = buildAIPayload(chartObj); 
-            systemPrompt += `\n\n【全息命盘结构化数据包(原局)】：\n${JSON.stringify(aiPayload, null, 2)}`;
-          } catch(e) {
-            systemPrompt += `\n\n【命盘基础数据】：\n${activeChartText}`;
-          }
+        try {
+          const chartObj = JSON.parse(activeChartText);
+          const aiPayload = buildAIPayload(chartObj); // 单层原局解析
+          systemPrompt += `\n\n【全息命盘结构化数据包(原局)】：\n${JSON.stringify(aiPayload, null, 2)}`;
+        } catch(e) {
+          systemPrompt += `\n\n【命盘基础数据】：\n${activeChartText}`;
         }
       }
 
@@ -171,12 +130,10 @@ export default function ChatRoom() {
     }
   };
 
-  // 🚀 发送消息总控 (取消了强制 API 检查)
   const handleSendMessage = async (customPromptForAI?: string, displayContent?: string, payloadStr?: string) => {
     const promptForAI = customPromptForAI || inputValue.trim();
     if (!promptForAI) return;
     
-    // UI 展示的消息，包裹 Payload 数据
     const newUserMessage: Message = { 
       id: Date.now().toString(), 
       role: 'user', 
@@ -187,10 +144,9 @@ export default function ChatRoom() {
     setMessages(prev => [...(prev || []), newUserMessage]);
     if (!customPromptForAI) setInputValue('');
 
-    // 发给 AI 的终极组装
     let finalPromptToAI = promptForAI;
     if (payloadStr) {
-        finalPromptToAI += `\n\n【附加命理数据包】：\n${payloadStr}`;
+        finalPromptToAI += `\n\n【附加动态命理数据包】：\n${payloadStr}`;
     }
 
     await streamChat(finalPromptToAI, !!payloadStr);
@@ -198,15 +154,13 @@ export default function ChatRoom() {
 
   const handleStartAnalysis = async () => {
     if (!chartText.trim()) return;
-    
     setIsAnalyzing(true);
     try {
       const parsedObj = parseWenMoTianJiToJSON(chartText);
       const pureJsonStr = JSON.stringify(parsedObj, null, 2);
-      
       setActiveChartText(pureJsonStr); 
       
-      const aiPayload = buildAIPayload(parsedObj);
+      const aiPayload = buildAIPayload(parsedObj); // 生成极简原局
       const payloadStr = JSON.stringify(aiPayload, null, 2);
 
       const displayContent = `🔮 成功导入并解析排盘文本。请基于原局为我推算。`;
@@ -235,18 +189,14 @@ export default function ChatRoom() {
 
   const handleLoadSelectedCases = async () => {
     if (selectedCaseIds.length === 0) return;
-
     if (selectedCaseIds.length === 1) {
       const c = cases.find(c => c.id === selectedCaseIds[0]);
       if (c) {
         setActiveChartText(c.content); 
-        
-        const aiPayload = buildAIPayload(JSON.parse(c.content));
+        const aiPayload = buildAIPayload(JSON.parse(c.content)); // 极简单层原局
         const payloadStr = JSON.stringify(aiPayload, null, 2);
-        
         const displayContent = `🔮 载入命盘：${c.name}`;
         const promptToAI = `我已切换至命盘：${c.name}，请查收。`;
-        
         await handleSendMessage(promptToAI, displayContent, payloadStr);
       }
     }
@@ -254,71 +204,104 @@ export default function ChatRoom() {
     setSelectedCaseIds([]);
   };
 
-  // ⏳ 运限精准推算
-  const handleCalculateLimit = async () => {
-    if (!activeChartText || (selectedDecadeIndex === null && selectedYear === null)) return;
-    
+  // ⏳ 提取动态维度的核心引擎 (1层/2层/3层 智能伸缩)
+  const extractTimeLimitPayload = (targetDate: Date, overrideDecadeIndex: number | null = null) => {
+    if (!activeChartText) return null;
     try {
       const chartObj = JSON.parse(activeChartText);
-      
-      if (!chartObj?.rawParams) {
-        alert("⚠️ 该命盘是通过『旧版文本导入』的，缺失经纬度与真太阳时参数，无法启动时空穿梭机！请使用左上角的『原生排盘』功能重新生成命盘。");
-        return;
-      }
+      // 如果没有原生数据，只能输出单层原局
+      if (!chartObj?.rawParams) return { payloadStr: JSON.stringify(buildAIPayload(chartObj), null, 2), focusTitle: '原局底盘' };
 
       const astrolabe = astro.bySolar(chartObj.rawParams.birthday, chartObj.rawParams.birthTime, chartObj.rawParams.gender, true, 'zh-CN');
-      const horoscope = astrolabe.horoscope(focusDate);
-      const decades = astrolabe.palaces.map((p, idx) => ({ ...p.decadal, palaceIndex: idx, name: p.name })).sort((a,b) => a.range[0] - b.range[0]);
+      const horoscope = astrolabe.horoscope(targetDate);
       
       let decadeData: DynamicContext | undefined = undefined;
       let yearData: DynamicContext | undefined = undefined;
+      let focusTitle = `${targetDate.getFullYear()}年 流年`;
 
-      if (horoscope.decadal) {
+      // 解析大限层 (2层)
+      if (horoscope.decadal && (horoscope.decadal as any).palaces) {
         const d = horoscope.decadal;
         const mapping: Record<string, string> = {};
-        (horoscope as any).palaces.forEach((p: any) => { if (p.decadal.name) mapping[p.decadal.name] = p.earthlyBranch; });
+        (d as any).palaces.forEach((palaceName: string, idx: number) => { 
+            mapping[`大限${palaceName}`] = astrolabe.palaces[idx].earthlyBranch; 
+        });
+        
+        const decades = astrolabe.palaces.map(p => p.decadal);
         const currentDecade = decades.find(dec => dec.heavenlyStem === d.heavenlyStem && dec.earthlyBranch === d.earthlyBranch);
+        const timeLabel = overrideDecadeIndex !== null 
+            ? `第${overrideDecadeIndex + 1}大限 (${currentDecade?.range[0]}-${currentDecade?.range[1]}岁)` 
+            : `当前大限 (${currentDecade?.range[0]}-${currentDecade?.range[1]}岁)`;
+
+        if (overrideDecadeIndex !== null) focusTitle = timeLabel;
+
         decadeData = {
-          timeLabel: `第${selectedDecadeIndex !== null ? selectedDecadeIndex + 1 : '?'}大限 (${currentDecade?.range[0]}-${currentDecade?.range[1]}岁)`,
+          timeLabel,
           ganZhi: `${d.heavenlyStem}${d.earthlyBranch}`,
-          sihua: SI_HUA_MAP[d.heavenlyStem] || "未知",
           mapping
         };
       }
 
-      if (selectedYear !== null && horoscope.yearly) {
-        const y = horoscope.yearly;
-        const mapping: Record<string, string> = {};
-        (horoscope as any).palaces.forEach((p: any) => { if (p.yearly.name) mapping[p.yearly.name] = p.earthlyBranch; });
-        yearData = {
-          timeLabel: `${selectedYear}年流年`,
-          ganZhi: `${y.heavenlyStem}${y.earthlyBranch}`,
-          sihua: SI_HUA_MAP[y.heavenlyStem] || "未知",
-          mapping
-        };
+      // 解析流年层 (3层) - 只有用户真的点了年份，或者默认看今天时才加载
+      if (overrideDecadeIndex === null || selectedYear !== null) {
+        if (horoscope.yearly && (horoscope.yearly as any).palaces) {
+          const y = horoscope.yearly;
+          const mapping: Record<string, string> = {};
+          (y as any).palaces.forEach((palaceName: string, idx: number) => { 
+              mapping[`流年${palaceName}`] = astrolabe.palaces[idx].earthlyBranch; 
+          });
+          yearData = {
+            timeLabel: `${targetDate.getFullYear()}年 流年`,
+            ganZhi: `${y.heavenlyStem}${y.earthlyBranch}`,
+            mapping
+          };
+          focusTitle = `${targetDate.getFullYear()}年 流年`;
+        }
       }
 
+      // 组装最终全息对象
       const aiPayload = buildAIPayload(astrolabe, decadeData, yearData);
-      const payloadStr = JSON.stringify(aiPayload, null, 2);
-
-      const focusTitle = selectedYear !== null ? `${selectedYear}年 流年运势` : decadeData?.timeLabel;
-      
-      const displayContent = `🔮 发起运限推演\n▶ 目标时空：${focusTitle}\n▶ 模式：三盘叠影全息分析`;
-      const promptToAI = `[系统指令：运限精准推算]\n当前用户希望推算的时空节点为：${focusTitle}。请基于附加数据包中的三盘叠影坐标，重点分析该运限的机遇与危机。`;
-
-      await handleSendMessage(promptToAI, displayContent, payloadStr);
-
+      return { payloadStr: JSON.stringify(aiPayload, null, 2), focusTitle };
     } catch (e) {
-      console.error(e);
-      alert("推算失败，排盘数据结构异常！");
+      return null;
     }
+  };
+
+  // 🎯 精准推算按钮
+  const handleCalculateLimit = async () => {
+    if (selectedDecadeIndex === null && selectedYear === null) return;
+    const res = extractTimeLimitPayload(focusDate, selectedYear === null ? selectedDecadeIndex : null);
+    if (!res) return;
+
+    const displayContent = `🔮 发起运限推演\n▶ 目标时空：${res.focusTitle}\n▶ 模式：全息叠影维度展开`;
+    const promptToAI = `[系统指令：运限精准推算]\n当前用户希望推算的时空节点为：${res.focusTitle}。请基于附加的全息压缩数据包，直接读取【宫位身份】寻找叠宫，重点分析该运限吉凶。`;
+    await handleSendMessage(promptToAI, displayContent, res.payloadStr);
+  };
+
+  // 🎯 快捷问答按钮
+  const handleQuickQuestion = async (topic: string) => {
+    if (!activeChartText) {
+      handleSendMessage(`请帮我重点推测：${topic}`);
+      return;
+    }
+    
+    // 如果没有选中特定的年份大限，默认拉取现在的流年(3层满血)
+    const res = extractTimeLimitPayload(focusDate, selectedYear === null && selectedDecadeIndex !== null ? selectedDecadeIndex : null);
+    if (!res) {
+      handleSendMessage(`请帮我重点推测：${topic}`);
+      return;
+    }
+
+    const displayContent = `🔮 快捷推演：${topic}\n▶ 参照时空：${res.focusTitle}`;
+    const promptToAI = `[系统指令：精准推算]\n当前用户希望重点推测：【${topic}】。请基于附加数据包，利用叠影坐标和动态四化落点，给予深度分析。`;
+    await handleSendMessage(promptToAI, displayContent, res.payloadStr);
   };
 
   const handleClearChat = () => setShowClearConfirm(true);
   const executeClearChat = () => {
     window.localStorage.removeItem('ziwei_chat_messages');
     window.localStorage.removeItem('ziwei_active_chart');
-    setMessages([{ id: Date.now().toString(), role: 'ai', content: '你好，我是紫微多维共振引擎。您可以粘贴命盘给我。' }]);
+    setMessages([{ id: Date.now().toString(), role: 'ai', content: '你好，我是紫微多维共振引擎。' }]);
     setActiveChartText('');
     setShowClearConfirm(false);
   };
@@ -489,7 +472,7 @@ export default function ChatRoom() {
         <div className="p-4 bg-zinc-950/50 border-t border-zinc-800">
           <div className="flex gap-2 overflow-x-auto pb-3 no-scrollbar">
             {['今年财运', '性格格局', '感情缘分', '事业变动'].map(t => (
-              <button key={t} onClick={() => handleSendMessage(`请帮我重点推测：${t}`)} className="px-3 py-1 bg-zinc-900 border border-zinc-800 rounded-full text-[11px] text-zinc-400 hover:text-emerald-400 whitespace-nowrap">{t}</button>
+              <button key={t} onClick={() => handleQuickQuestion(t)} className="px-3 py-1 bg-zinc-900 border border-zinc-800 rounded-full text-[11px] text-zinc-400 hover:text-emerald-400 whitespace-nowrap">{t}</button>
             ))}
           </div>
           <div className="flex gap-3">
