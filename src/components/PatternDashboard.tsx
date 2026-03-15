@@ -88,12 +88,18 @@ export default function PatternDashboard({ patterns }: Props) {
               </div>
             </div>
 
+            {/* 🚀 优势宫位专属特写与全新免责声明 */}
             {selectedPattern.isAdvantage && selectedPattern.advantageText && (
-              <div className="mb-6 p-4 rounded-xl bg-gradient-to-r from-amber-500/20 to-transparent border border-amber-500/30">
+              <div className="mb-6 p-4 rounded-xl bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/20">
                 <div className="flex items-center text-amber-500 font-bold mb-2">
-                  <span>🌟 绝对主场特写 (PERFECT MATCH)</span>
+                  <span>🌟 绝对主场特写</span>
                 </div>
-                <p className="text-amber-100/80 text-sm leading-relaxed">{selectedPattern.advantageText}</p>
+                <p className="text-amber-100/90 text-sm leading-relaxed mb-3">{selectedPattern.advantageText}</p>
+                <div className="pt-2 border-t border-amber-500/20">
+                  <p className="text-[10px] text-amber-500/70">
+                    *注：该特写仅为宫位泛化基准解释，实际境遇请结合下方星曜吉凶综合研判。
+                  </p>
+                </div>
               </div>
             )}
 
@@ -115,11 +121,12 @@ export default function PatternDashboard({ patterns }: Props) {
                   {selectedPattern.isInnerPalace ? '六内宫 (主自身决策)' : '六外宫 (主环境境遇)'}
                 </span>
               </div>
-              <p className="text-[10px] text-zinc-500 mb-4 ml-1 italic">
-                {selectedPattern.isInnerPalace 
-                  ? '*六内宫(命财官迁夫子)：代表与自身行为决策、个人直接关联的核心维度。' 
-                  : '*六外宫(兄友疾田福父)：代表客观环境、外界境遇与他人带来的影响。'}
-              </p>
+              
+              {/* 🚀 完善的内外宫双重释义 */}
+              <div className="text-[10px] text-zinc-500 mb-4 ml-1 italic flex flex-col gap-1">
+                <span>*六内宫(命财官迁夫子)：代表与自身行为决策、个人直接关联的核心维度。</span>
+                <span>*六外宫(兄友疾田福父)：代表客观环境、外界境遇与他人带来的影响。</span>
+              </div>
               
               <div className="p-5 rounded-xl bg-zinc-900 border border-zinc-800 space-y-4">
                 <p className="text-zinc-300 text-sm leading-loose tracking-wide">
