@@ -3,23 +3,26 @@ import { astro } from 'iztro';
 
 type Gender = '男' | '女';
 
-export const generateNativeChart = (dateStr: string, timeStr: string | number, gender: string) => {
+export interface NativeChartOptions {
+  name?: string;
+  calendarType: 'solar' | 'lunar';
+  dateStr: string; // YYYY-MM-DD
+  timeIndex: number; // 0-11
+  gender: string;
+  isLeapMonth?: boolean;
+}
+
+export const generateNativeChart = (options: NativeChartOptions) => {
   try {
-    let timeIndex = 0;
-    if (typeof timeStr === 'number') {
-      timeIndex = timeStr;
+    const { calendarType, dateStr, timeIndex, gender, isLeapMonth } = options;
+    
+    let astrolabe;
+    if (calendarType === 'lunar') {
+      astrolabe = astro.byLunar(dateStr, timeIndex, gender as Gender, isLeapMonth, true, 'zh-CN');
     } else {
-      const timeMap: Record<string, number> = { 
-        '子时': 0, '丑时': 1, '寅时': 2, '卯时': 3, '辰时': 4, '巳时': 5, 
-        '午时': 6, '未时': 7, '申时': 8, '酉时': 9, '戌时': 10, '亥时': 11 
-      };
-      timeIndex = timeMap[timeStr] !== undefined ? timeMap[timeStr] : 0;
+      astrolabe = astro.bySolar(dateStr, timeIndex, gender as Gender, true, 'zh-CN');
     }
-
-    const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return null;
-
-    const astrolabe = astro.bySolar(dateStr, timeIndex, gender as Gender, true, 'zh-CN');
+    
     if (!astrolabe) return null;
 
     const targetDate = new Date(); 
@@ -36,8 +39,10 @@ export const generateNativeChart = (dateStr: string, timeStr: string | number, g
 
     return {
       basicInfo: {
+        "姓名": options.name || '匿名',
         "性别": astrolabe.gender,
         "阴历": astrolabe.lunarDate.toString(),
+        "阳历": astrolabe.solarDate,
         "五行局": astrolabe.fiveElementsClass,
         "命主": astrolabe.soul,
         "身主": astrolabe.body
@@ -65,7 +70,6 @@ export const generateNativeChart = (dateStr: string, timeStr: string | number, g
           majorStars: p.majorStars,
           minorStars: p.minorStars,
           adjectiveStars: p.adjectiveStars,
-          // 🚀 核心修复：补全十二神煞！
           changsheng12: p.changsheng12,
           boshi12: p.boshi12,
           jiangqian12: p.jiangqian12,
@@ -75,10 +79,12 @@ export const generateNativeChart = (dateStr: string, timeStr: string | number, g
         };
       }),
       rawParams: {
+        name: options.name,
         birthday: dateStr,
         birthTime: timeIndex,
         gender: gender,
-        birthdayType: 'solar'
+        birthdayType: calendarType,
+        isLeapMonth: isLeapMonth
       }
     };
   } catch (error) {

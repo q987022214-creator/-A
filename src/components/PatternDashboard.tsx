@@ -8,7 +8,10 @@ interface Props {
 export default function PatternDashboard({ patterns }: Props) {
   const [selectedPattern, setSelectedPattern] = useState<PatternResult | null>(null);
 
-  if (!patterns || patterns.length === 0) {
+  // 🚀 核心过滤：只有标记为 showInDashboard 的格局（即落在优势/典型宫位，满血分数的格局）才会在顶部阵列显示
+  const displayPatterns = patterns.filter(p => p.showInDashboard);
+
+  if (!displayPatterns || displayPatterns.length === 0) {
     return (
       <div className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-4 mb-6 text-center text-sm text-zinc-500">
         盘面气机隐潜，未触发显性大格，请以十二宫常态共振为主。
@@ -23,11 +26,11 @@ export default function PatternDashboard({ patterns }: Props) {
           <span className="w-2 h-2 bg-emerald-500 rounded-full mr-2 shadow-[0_0_8px_#10b981]"></span>
           核心格局探测阵列 (DETECTED PATTERNS)
         </h2>
-        <span className="text-zinc-500 text-xs">发现 {patterns.length} 个特殊场域</span>
+        <span className="text-zinc-500 text-xs">发现 {displayPatterns.length} 个特殊场域</span>
       </div>
 
       <div className="flex overflow-x-auto gap-4 pb-4 snap-x hide-scrollbar">
-        {patterns.map((p, idx) => {
+        {displayPatterns.map((p, idx) => {
           const isGood = p.type === '吉';
           return (
             <div 

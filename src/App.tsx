@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Sidebar, { TabType } from './components/Sidebar';
 import ChatRoom from './components/ChatRoom';
 import MemoryManager from './components/MemoryManager';
@@ -9,14 +9,22 @@ import Sandbox from './components/Sandbox';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('chat');
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   return (
     <div className="flex h-screen bg-zinc-950 text-zinc-300 font-sans overflow-hidden">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} isMobile={isMobile} />
       
-      <main className="flex-1 overflow-hidden p-8 bg-zinc-950/50 relative">
+      <main className={`flex-1 overflow-hidden p-0 md:p-8 bg-zinc-950/50 relative ${isMobile ? 'pl-16' : ''}`}>
         {/* Subtle background glow */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-emerald-500/5 blur-[120px] rounded-full pointer-events-none"></div>
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-emerald-500/5 blur-[120px] rounded-full pointer-events-none hidden md:block"></div>
         
         <div className="h-full relative z-10">
           {activeTab === 'chat' && <ChatRoom />}
