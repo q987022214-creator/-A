@@ -1,3 +1,4 @@
+// src/components/PatternDashboard.tsx
 import React, { useState } from 'react';
 import { PatternResult } from '../utils/patternRecognizer';
 
@@ -14,7 +15,7 @@ export default function PatternDashboard({ patterns }: Props) {
   if (!displayPatterns || displayPatterns.length === 0) {
     return (
       <div className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-4 mb-6 text-center text-sm text-zinc-500">
-        盘面气机隐潜，未触发显性大格，请以十二宫常态共振为主。
+        盘面气机隐潜，未触发显性大格，请以十二宫常态共振为主。（隐性格局已在底层影响具体宫位分数）
       </div>
     );
   }
@@ -125,7 +126,6 @@ export default function PatternDashboard({ patterns }: Props) {
                   {selectedPattern.advice}
                 </p>
                 
-                {/* 核心升级：无论内外宫，强力渲染补充定性 */}
                 {selectedPattern.supplementaryAdvice && (
                   <div className="pt-4 border-t border-zinc-800/50 mt-4">
                     <h4 className="text-purple-400 text-xs font-bold mb-2 tracking-widest flex items-center gap-2">
