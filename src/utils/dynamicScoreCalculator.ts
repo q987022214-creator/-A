@@ -23,6 +23,7 @@ export interface LifeTrendMatrix {
 const DECADE_NAMES = ['命宫', '兄弟宫', '夫妻宫', '子女宫', '财帛宫', '疾厄宫', '迁移宫', '交友宫', '官禄宫', '田宅宫', '福德宫', '父母宫'];
 const SELF_DOMAINS = [0, 4, 8, 9, 5, 10]; 
 
+// 🚀 核心修复 1：地支绝对坐标系
 const BRANCHES = ["寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥", "子", "丑"];
 const getBranchIndex = (branch: string) => BRANCHES.indexOf(branch);
 
@@ -80,7 +81,7 @@ const getBrightnessBonus = (branchName: string) => {
 
 const hasStar = (palace: any, starName: string) => {
   const stars = [...(palace.majorStars||[]), ...(palace.minorStars||[])];
-  return stars.some((s:any) => s.name.includes(starName) || (starName==='化禄' && s.mutagen==='禄') || (starName==='化权' && s.mutagen==='权') || (starName==='化科' && s.mutagen==='科') || (starName==='化忌' && s.mutagen==='忌'));
+  return stars.some((s:any) => s.name.includes(starName));
 };
 const getStarObj = (palace: any, starName: string) => {
   const stars = [...(palace.majorStars||[]), ...(palace.minorStars||[])];
@@ -90,34 +91,38 @@ const getStarObj = (palace: any, starName: string) => {
 function calculateDomainBonus(domainIdx: number, physicalPalace: any) {
   let score = 0;
   let logs: string[] = [];
-
   const add = (s: number, reason: string) => { if (s !== 0) { score += s; logs.push(`${reason}: ${s>0?'+':''}${s}`); } };
 
   if (domainIdx === 4) {
     if (hasStar(physicalPalace, '武曲') || hasStar(physicalPalace, '天府') || hasStar(physicalPalace, '太阴')) add(1, "财宫逢武/府/阴");
     if (hasStar(physicalPalace, '禄存') || hasStar(physicalPalace, '化禄')) add(2, "财宫逢双禄");
-    if (hasStar(physicalPalace, '太阳') || hasStar(physicalPalace, '破军')) add(-1, "财宫逢阳/破(消耗)");
+    if (hasStar(physicalPalace, '太阳') || hasStar(physicalPalace, '破军')) add(-1, "财宫逢阳/破");
     if (hasStar(physicalPalace, '地空') || hasStar(physicalPalace, '地劫')) add(-2, "财宫逢空劫");
   }
   if ([2, 1, 7, 3, 11].includes(domainIdx)) {
-    if (hasStar(physicalPalace, '七杀') || hasStar(physicalPalace, '破军') || hasStar(physicalPalace, '武曲') || hasStar(physicalPalace, '巨门')) add(-1, "六亲宫逢杀破武巨");
+    if (hasStar(physicalPalace, '七杀') || hasStar(physicalPalace, '破军') || hasStar(physicalPalace, '武曲') || hasStar(physicalPalace, '巨门')) add(-1, "六亲宫逢耗星");
   }
   if (domainIdx === 9) {
-    if (hasStar(physicalPalace, '天府') || hasStar(physicalPalace, '太阴') || hasStar(physicalPalace, '禄存')) add(1, "田宅逢府/阴/禄");
-    if (hasStar(physicalPalace, '破军')) add(-1, "田宅逢破军(破荡)");
-    if (hasStar(physicalPalace, '地空') || hasStar(physicalPalace, '地劫')) add(-2, "田宅逢空劫");
+    if (hasStar(physicalPalace, '天府') || hasStar(physicalPalace, '太阴') || hasStar(physicalPalace, '禄存')) add(1, "田宅得库");
+    if (hasStar(physicalPalace, '破军')) add(-1, "田宅破耗");
+    if (hasStar(physicalPalace, '地空') || hasStar(physicalPalace, '地劫')) add(-2, "田宅空劫");
   }
   if (domainIdx === 8 || domainIdx === 6) {
     const isMiao = (sName: string) => { const s = getStarObj(physicalPalace, sName); return s && ['庙','旺'].includes(s.brightness); };
     if (isMiao('太阳') || hasStar(physicalPalace, '紫微') || hasStar(physicalPalace, '天府') || isMiao('太阴') || isMiao('武曲') || hasStar(physicalPalace, '天相') || hasStar(physicalPalace, '化禄') || hasStar(physicalPalace, '化权') || hasStar(physicalPalace, '化科')) {
-      add(1, "官/迁逢强力吉星护盘");
+      add(1, "官/迁逢强力护盘");
     }
-    if (hasStar(physicalPalace, '化忌')) add(-2, "官/迁逢化忌(波折)");
   }
   if (domainIdx === 10) {
     const s = getStarObj(physicalPalace, '太阴');
     if (hasStar(physicalPalace, '天同') || (s && ['庙','旺'].includes(s.brightness))) add(2, "福德逢同/阴(庙旺)");
-    if (hasStar(physicalPalace, '化忌')) add(-2, "福德逢化忌(执念)");
+  }
+
+  // 单独处理化忌得位
+  const allStars = [...(physicalPalace.majorStars||[]), ...(physicalPalace.minorStars||[])];
+  if (allStars.some(s => s.mutagen === '忌')) {
+    if (domainIdx === 8 || domainIdx === 6) add(-2, "官/迁逢化忌");
+    if (domainIdx === 10) add(-2, "福德逢化忌");
   }
 
   return { score, logs };
@@ -129,24 +134,30 @@ function calculatePhysicalOverlay(basePalaces: any[], decadeStem: string, decade
 
   const add = (idx: number, s: number, r: string) => { if (idx !== -1 && s !== 0) { scores[idx] += s; logs[idx].push(`${r}: ${s>0?'+':''}${s}`); } };
 
+  // 🚀 核心修复 2：辐射函数加入物理地支名称，拒绝盲人摸象！
   const addSFSZ = (targetIdx: number, baseScore: number, reason: string) => {
     if (targetIdx === -1) return;
-    add(targetIdx, baseScore, `${reason}(本)`);
-    add((targetIdx + 6) % 12, Number((baseScore * 0.8).toFixed(1)), `${reason}(对)`);
-    add((targetIdx + 4) % 12, Number((baseScore * 0.5).toFixed(1)), `${reason}(三方)`);
-    add((targetIdx + 8) % 12, Number((baseScore * 0.5).toFixed(1)), `${reason}(三方)`);
+    const bName = BRANCHES[targetIdx];
+    add(targetIdx, baseScore, `${reason}(于${bName}本宫)`);
+    add((targetIdx + 6) % 12, Number((baseScore * 0.8).toFixed(1)), `${reason}(于${bName}对宫辐射)`);
+    add((targetIdx + 4) % 12, Number((baseScore * 0.5).toFixed(1)), `${reason}(于${bName}三方辐射)`);
+    add((targetIdx + 8) % 12, Number((baseScore * 0.5).toFixed(1)), `${reason}(于${bName}三方辐射)`);
   };
 
   const decLocs = getDecadeStarsLocations(decadeStem, decadeBranch);
   const dKui = decLocs.kui, dYue = decLocs.yue, dYang = decLocs.yang, dTuo = decLocs.tuo;
   const dChang = decLocs.chang, dQu = decLocs.qu, dLuCun = decLocs.luCun, dMa = decLocs.ma;
   
-  const getIdx = (sName: string) => basePalaces.findIndex(p => hasStar(p, sName));
-  const oKui = getIdx('天魁'), oYue = getIdx('天钺'), oYang = getIdx('擎羊'), oTuo = getIdx('陀罗');
-  const oChang = getIdx('文昌'), oQu = getIdx('文曲'), oMa = getIdx('天马');
-  const oLu = getIdx('化禄'), oLuCun = getIdx('禄存'), oJi = getIdx('化忌'), oQuan = getIdx('化权'), oKe = getIdx('化科');
+  // 🚀 核心修复 3：彻底解耦数组索引，只认物理地支！
+  const getPhysIdxByStar = (sName: string) => { const p = basePalaces.find(p => hasStar(p, sName)); return p ? getBranchIndex(p.earthlyBranch) : -1; };
+  const getPhysIdxByMutagen = (m: string) => { const p = basePalaces.find(p => [...(p.majorStars||[]), ...(p.minorStars||[])].some(s => s.mutagen === m)); return p ? getBranchIndex(p.earthlyBranch) : -1; };
 
-  const dLu = getIdx(decLocs.sihua[0]), dQuan = getIdx(decLocs.sihua[1]), dKe = getIdx(decLocs.sihua[2]), dJi = getIdx(decLocs.sihua[3]);
+  const oKui = getPhysIdxByStar('天魁'), oYue = getPhysIdxByStar('天钺'), oYang = getPhysIdxByStar('擎羊'), oTuo = getPhysIdxByStar('陀罗');
+  const oChang = getPhysIdxByStar('文昌'), oQu = getPhysIdxByStar('文曲'), oMa = getPhysIdxByStar('天马');
+  const oLuCun = getPhysIdxByStar('禄存');
+  const oLu = getPhysIdxByMutagen('禄'), oQuan = getPhysIdxByMutagen('权'), oKe = getPhysIdxByMutagen('科'), oJi = getPhysIdxByMutagen('忌');
+
+  const dLu = getPhysIdxByStar(decLocs.sihua[0]), dQuan = getPhysIdxByStar(decLocs.sihua[1]), dKe = getPhysIdxByStar(decLocs.sihua[2]), dJi = getPhysIdxByStar(decLocs.sihua[3]);
 
   const applyAuspiciousPair = (o1: number, o2: number, d1: number, d2: number, n1: string, n2: string) => {
     if (o1 !== -1 && d2 !== -1) {
@@ -169,60 +180,60 @@ function calculatePhysicalOverlay(basePalaces: any[], decadeStem: string, decade
     }
   };
 
-  if (dKui !== -1) addSFSZ(dKui, 3 + getBrightnessBonus(basePalaces[dKui].earthlyBranch), "限魁单见");
-  if (dYue !== -1) addSFSZ(dYue, 3 + getBrightnessBonus(basePalaces[dYue].earthlyBranch), "限钺单见");
-  if (dChang !== -1) addSFSZ(dChang, 3 + getBrightnessBonus(basePalaces[dChang].earthlyBranch), "限昌单见");
-  if (dQu !== -1) addSFSZ(dQu, 3 + getBrightnessBonus(basePalaces[dQu].earthlyBranch), "限曲单见");
-  if (dLuCun !== -1) addSFSZ(dLuCun, 3 + getBrightnessBonus(basePalaces[dLuCun].earthlyBranch), "限禄存单见");
-  if (dMa !== -1) addSFSZ(dMa, 3 + getBrightnessBonus(basePalaces[dMa].earthlyBranch), "限马单见");
+  if (dKui !== -1) addSFSZ(dKui, 3 + getBrightnessBonus(BRANCHES[dKui]), "限魁单见");
+  if (dYue !== -1) addSFSZ(dYue, 3 + getBrightnessBonus(BRANCHES[dYue]), "限钺单见");
+  if (dChang !== -1) addSFSZ(dChang, 3 + getBrightnessBonus(BRANCHES[dChang]), "限昌单见");
+  if (dQu !== -1) addSFSZ(dQu, 3 + getBrightnessBonus(BRANCHES[dQu]), "限曲单见");
+  if (dLuCun !== -1) addSFSZ(dLuCun, 3 + getBrightnessBonus(BRANCHES[dLuCun]), "限禄存单见");
+  if (dMa !== -1) addSFSZ(dMa, 3 + getBrightnessBonus(BRANCHES[dMa]), "限马单见");
 
   applyAuspiciousPair(oKui, oYue, dKui, dYue, '魁', '钺');
   applyAuspiciousPair(oChang, oQu, dChang, dQu, '昌', '曲');
   applyAuspiciousPair(oLuCun, oMa, dLuCun, dMa, '禄存', '马');
 
-  if (dYang !== -1) addSFSZ(dYang, -3 + getBrightnessBonus(basePalaces[dYang].earthlyBranch), "限羊单见");
-  if (dTuo !== -1) addSFSZ(dTuo, -3 + getBrightnessBonus(basePalaces[dTuo].earthlyBranch), "限陀单见");
+  if (dYang !== -1) addSFSZ(dYang, -3 + getBrightnessBonus(BRANCHES[dYang]), "限羊单见");
+  if (dTuo !== -1) addSFSZ(dTuo, -3 + getBrightnessBonus(BRANCHES[dTuo]), "限陀单见");
 
   if (dYang === oYang) add(dYang, -4, "原羊+限羊(同宫)");
   if (dTuo === oTuo) add(dTuo, -4, "原陀+限陀(同宫)");
   if (dYang === oTuo) add(dYang, -6, "原陀+限羊(同宫)");
   if (dTuo === oYang) add(dTuo, -6, "原羊+限陀(同宫)");
   
-  if (getSpatialRelation(dYang, oTuo) === 1) add(dYang, -3, "原陀冲限羊(对宫)");
-  if (getSpatialRelation(dTuo, oYang) === 1) add(dTuo, -3, "原羊冲限陀(对宫)");
-  if (getSpatialRelation(dYang, oTuo) === 2) add(dYang, -2, "原陀+限羊(三方)");
-  if (getSpatialRelation(dTuo, oYang) === 2) add(dTuo, -2, "原羊+限陀(三方)");
-  if (getSpatialRelation(dYang, oYang) === 2) add(dYang, -1, "原羊+限羊(三方)");
-  if (getSpatialRelation(dTuo, oTuo) === 2) add(dTuo, -1, "原陀+限陀(三方)");
+  if (getSpatialRelation(dYang, oTuo) === 1) add(dYang, -3, `原陀冲限羊(对宫)`);
+  if (getSpatialRelation(dTuo, oYang) === 1) add(dTuo, -3, `原羊冲限陀(对宫)`);
+  if (getSpatialRelation(dYang, oTuo) === 2) add(dYang, -2, `原陀+限羊(三方)`);
+  if (getSpatialRelation(dTuo, oYang) === 2) add(dTuo, -2, `原羊+限陀(三方)`);
+  if (getSpatialRelation(dYang, oYang) === 2) add(dYang, -1, `原羊+限羊(三方)`);
+  if (getSpatialRelation(dTuo, oTuo) === 2) add(dTuo, -1, `原陀+限陀(三方)`);
 
   if (dLu !== -1) {
     add(dLu, 10, "限禄入局");
     if (dLu === oLu || dLu === oLuCun) add(dLu, 10, "原禄+限禄(同宫)");
-    else if (getSpatialRelation(dLu, oLu) === 1 || getSpatialRelation(dLu, oLuCun) === 1) add(dLu, 8, "原禄限禄(对宫)");
-    else if (getSpatialRelation(dLu, oLu) === 2 || getSpatialRelation(dLu, oLuCun) === 2) add(dLu, 5, "原禄限禄(三方)");
+    else if (getSpatialRelation(dLu, oLu) === 1 || getSpatialRelation(dLu, oLuCun) === 1) add(dLu, 8, "原禄冲限禄(对宫)");
+    else if (getSpatialRelation(dLu, oLu) === 2 || getSpatialRelation(dLu, oLuCun) === 2) add(dLu, 5, "原禄会限禄(三方)");
   }
   if (dQuan !== -1) {
     add(dQuan, 7, "限权入局");
     if (dQuan === oQuan) add(dQuan, 7, "原权+限权(同宫)");
-    else if (getSpatialRelation(dQuan, oQuan) === 1) add(dQuan, 5, "原权+限权(对宫)");
-    else if (getSpatialRelation(dQuan, oQuan) === 2) add(dQuan, 3, "原权+限权(三方)");
+    else if (getSpatialRelation(dQuan, oQuan) === 1) add(dQuan, 5, "原权冲限权(对宫)");
+    else if (getSpatialRelation(dQuan, oQuan) === 2) add(dQuan, 3, "原权会限权(三方)");
   }
   if (dKe !== -1) {
     add(dKe, 5, "限科入局");
     if (dKe === oKe) add(dKe, 5, "原科+限科(同宫)");
-    else if (getSpatialRelation(dKe, oKe) === 1) add(dKe, 3, "原科+限科(对宫)");
-    else if (getSpatialRelation(dKe, oKe) === 2) add(dKe, 1, "原科+限科(三方)");
+    else if (getSpatialRelation(dKe, oKe) === 1) add(dKe, 3, "原科冲限科(对宫)");
+    else if (getSpatialRelation(dKe, oKe) === 2) add(dKe, 1, "原科会限科(三方)");
   }
 
   if (dJi !== -1) {
-    if (dJi === oJi) add(dJi, -10, "原忌+限忌(同宫)");
-    else if (getSpatialRelation(dJi, oJi) === 1) add(dJi, -8, "原忌+限忌(对宫)");
-    else if (getSpatialRelation(dJi, oJi) === 2) add(dJi, -5, "原忌+限忌(三方)");
+    if (dJi === oJi) add(dJi, -10, "原忌+限忌(同宫核爆)");
+    else if (getSpatialRelation(dJi, oJi) === 1) add(dJi, -8, "原忌冲限忌(对宫)");
+    else if (getSpatialRelation(dJi, oJi) === 2) add(dJi, -5, "原忌会限忌(三方)");
   }
 
-  if (dJi !== -1 && (dJi === oLu || dJi === oLuCun)) add(dJi, -8, "原禄逢限忌(大破)");
-  if (dLu !== -1 && dLu === oJi) add(dLu, -4, "原忌逢限禄(生机)");
-  if (dLu !== -1 && dLu === dJi) add(dLu, -8, "限禄战限忌");
+  if (dJi !== -1 && (dJi === oLu || dJi === oLuCun)) add(dJi, -8, "原禄逢限忌(禄逢冲破)");
+  if (dLu !== -1 && dLu === oJi) add(dLu, -4, "原忌逢限禄(绝处逢生)");
+  if (dLu !== -1 && dLu === dJi) add(dLu, -8, "限禄战限忌(双重消耗)");
 
   return { scores, logs };
 }
@@ -244,16 +255,15 @@ export function generateLifeTrendMatrix(basePalaces: any[], decades: any[], base
 
     for (let domainIdx = 0; domainIdx < 12; domainIdx++) {
       const targetPhysIdx = (decLifeIdx - domainIdx + 12) % 12;
-      const physBranch = BRANCHES[targetPhysIdx]; // 🚀 获取真实的物理地支
-      const physName = basePalaces[targetPhysIdx].name.replace('宫', '') + '宫';
+      const physBranch = BRANCHES[targetPhysIdx]; 
+      const physName = basePalaces.find((p:any)=>p.earthlyBranch === physBranch)?.name.replace('宫', '') + '宫';
 
-      // 🚀 核心修复：通过物理地支在 baseScoresData 中精确查找！绝对拒绝按排名取值！
+      // 绝对物理匹配，拒绝名次索引！
       const basePalaceData = baseScoresData.find((p: any) => p.earthlyBranch === physBranch);
-      
-      // 提取原局三方四正综合底分 (排除格局分)
       const bScore = Number(basePalaceData?.matrixScore ?? 0);
 
-      const domainResult = calculateDomainBonus(domainIdx, basePalaces[targetPhysIdx]);
+      const targetPhysicalPalace = basePalaces.find((p:any) => p.earthlyBranch === physBranch);
+      const domainResult = calculateDomainBonus(domainIdx, targetPhysicalPalace);
 
       let aScore = 0;
       let aLogs: string[] = [];
@@ -270,7 +280,7 @@ export function generateLifeTrendMatrix(basePalaces: any[], decades: any[], base
       let oScore = overlays.scores[targetPhysIdx];
       let oLogs = [...overlays.logs[targetPhysIdx]];
       
-      const dJiIdx = basePalaces.findIndex(p => hasStar(p, getDecadeStarsLocations(dec.heavenlyStem, dec.earthlyBranch).sihua[3]));
+      const dJiIdx = getPhysIdxByMutagen(basePalaces, dec.heavenlyStem, '忌', dec.earthlyBranch); // Safe check
       if (dJiIdx === targetPhysIdx) {
         const jiPenalty = SELF_DOMAINS.includes(domainIdx) ? -3 : -5;
         oScore += jiPenalty;
@@ -313,4 +323,15 @@ export function generateLifeTrendMatrix(basePalaces: any[], decades: any[], base
   });
 
   return { palaceTrends, overallTrends, decadeLabels };
+}
+
+// 辅助方法，安全获取限忌位置
+function getPhysIdxByMutagen(basePalaces: any[], stem: string, m: string, branch: string) {
+   const locs = getDecadeStarsLocations(stem, branch);
+   if (m === '忌') {
+      const starName = locs.sihua[3];
+      const p = basePalaces.find(p => hasStar(p, starName));
+      return p ? getBranchIndex(p.earthlyBranch) : -1;
+   }
+   return -1;
 }
