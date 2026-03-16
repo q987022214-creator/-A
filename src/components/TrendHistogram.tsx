@@ -3,7 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { astro } from 'iztro';
 import { generateLifeTrendMatrix, DynamicPalaceDelta } from '../utils/dynamicScoreCalculator';
 import { recognizePatterns } from '../utils/patternRecognizer';
-import { calculatePalaceScores } from '../utils/scoreCalculator'; // 👈 引入底层算分引擎以获取老本
+import { calculatePalaceScores } from '../utils/scoreCalculator'; 
 
 interface Props {
   iztroData: string | null;
@@ -23,14 +23,13 @@ export default function TrendHistogram({ iztroData }: Props) {
 
       const astrolabe = astro.bySolar(chartObj.rawParams.birthday, chartObj.rawParams.birthTime, chartObj.rawParams.gender, true, 'zh-CN');
       const basePalaces = astrolabe.palaces;
-      // 这里的下拉菜单展示大限维度，不再是死板的物理宫位
       const palaceNames = ['大限命宫', '大限兄弟', '大限夫妻', '大限子女', '大限财帛', '大限疾厄', '大限迁移', '大限交友', '大限官禄', '大限田宅', '大限福德', '大限父母'];
       const decades = basePalaces.map(p => p.decadal).sort((a,b) => a.range[0] - b.range[0]);
       
       const basePatterns = recognizePatterns(chartObj);
-      const baseScores = calculatePalaceScores(chartObj); // 提取老本
+      const baseScoresData = calculatePalaceScores(chartObj); // 底层返回包含 baseScore(纯星曜) 和 totalScore 的数组
 
-      const matrix = generateLifeTrendMatrix(basePalaces, decades, basePatterns, baseScores);
+      const matrix = generateLifeTrendMatrix(basePalaces, decades, basePatterns, baseScoresData);
       return { ...matrix, palaceNames };
     } catch(e) {
       return null;
@@ -43,16 +42,14 @@ export default function TrendHistogram({ iztroData }: Props) {
   const isOverall = selectedDimension === -1;
   const currentDataArray = isOverall ? overallTrends : palaceTrends[selectedDimension];
   
-  // 以分数为基础做高度映射，即使都是正数也能看出起伏
   const numericScores = currentDataArray.map(item => item.totalDelta);
-  const maxAbsValue = Math.max(...numericScores.map(Math.abs), 10); 
+  const maxAbsValue = Math.max(...numericScores.map(Math.abs), 20); 
 
   const activeDetail = selectedDecade !== null ? currentDataArray[selectedDecade] : null;
 
   return (
     <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-5 w-full mb-6 shadow-lg shadow-black/40">
       
-      {/* 顶部控制栏 */}
       <div className="flex justify-between items-end mb-8 border-b border-zinc-800 pb-4">
         <div>
           <h3 className="text-emerald-500 font-bold tracking-widest text-sm flex items-center gap-2">
@@ -61,7 +58,7 @@ export default function TrendHistogram({ iztroData }: Props) {
           </h3>
           <p className="text-zinc-500 text-xs mt-1.5">
             {isOverall 
-              ? '洞察一生综合起伏（大限命财官总和）' 
+              ? '洞察一生综合起伏（该大限十二宫总和）' 
               : `追踪【${palaceNames[selectedDimension]}】在各阶段的动态走势`}
           </p>
         </div>
@@ -75,15 +72,13 @@ export default function TrendHistogram({ iztroData }: Props) {
         </select>
       </div>
 
-      {/* 直方图绘制区 */}
       <div className="relative h-48 w-full flex items-end justify-between px-2 pt-8 pb-2">
         <div className="absolute left-0 right-0 top-1/2 border-t border-zinc-800 border-dashed w-full -translate-y-1/2 z-0"></div>
         
         {currentDataArray.map((item, idx) => {
           const score = item.totalDelta;
-          const hasActivation = item.activationScore > 0;
+          const hasActivation = item.activationScore > 0 || item.domainScore > 0;
           const isPositive = score >= 0;
-          // 计算高度，限制在 45% 内防顶破
           const heightPercent = (Math.abs(score) / maxAbsValue) * 45;
           const isSelected = selectedDecade === idx;
           
@@ -93,14 +88,12 @@ export default function TrendHistogram({ iztroData }: Props) {
               onClick={() => setSelectedDecade(isSelected ? null : idx)}
               className="relative flex flex-col items-center w-[8%] h-full group cursor-pointer z-10"
             >
-              {/* 🌟 觉醒高亮徽章 */}
               {hasActivation && (
                 <div className="absolute -top-7 whitespace-nowrap bg-amber-500/20 border border-amber-500/50 text-amber-400 text-[9px] px-1.5 py-0.5 rounded flex items-center gap-1 shadow-[0_0_8px_rgba(245,158,11,0.3)] animate-pulse">
                   ✨ 得位
                 </div>
               )}
 
-              {/* 正分柱子 */}
               <div className="w-full h-1/2 flex items-end justify-center pb-0.5">
                 {isPositive && (
                   <div 
@@ -111,7 +104,6 @@ export default function TrendHistogram({ iztroData }: Props) {
                 )}
               </div>
 
-              {/* 负分柱子 */}
               <div className="w-full h-1/2 flex items-start justify-center pt-0.5">
                 {!isPositive && (
                   <div 
@@ -122,12 +114,10 @@ export default function TrendHistogram({ iztroData }: Props) {
                 )}
               </div>
 
-              {/* 分数气泡 */}
               <div className={`absolute text-[11px] font-mono font-bold transition-all duration-300 ${isPositive ? 'bottom-1/2 mb-1 group-hover:-translate-y-1 text-emerald-400' : 'top-1/2 mt-1 group-hover:translate-y-1 text-rose-400'}`}>
                 {score > 0 ? '+' : ''}{score}
               </div>
 
-              {/* 年龄标签 (换行居中) */}
               <div className={`absolute -bottom-10 text-[9px] text-center leading-tight transition-colors ${isSelected ? 'text-emerald-400 font-bold' : 'text-zinc-500 group-hover:text-zinc-300'}`}>
                 <span className="block">{decadeLabels[idx].split('\n')[0]}</span>
                 <span className="block opacity-60">{decadeLabels[idx].split('\n')[1]}</span>
@@ -137,73 +127,102 @@ export default function TrendHistogram({ iztroData }: Props) {
         })}
       </div>
 
-      {/* 🗂️ 点击后展开的核算账单面板 (Master-Detail) */}
       {activeDetail && (
         <div className="mt-14 pt-5 border-t border-zinc-800 animate-slide-up">
           <div className="flex justify-between items-center mb-4">
             <h4 className="text-white font-bold text-sm">
               <span className="text-zinc-500 mr-2">📅 [ {decadeLabels[selectedDecade!].replace('\n', ' ')} ]</span>
-              {activeDetail.domainName} 积分推演核算单
+              {activeDetail.domainName} 核算单
             </h4>
             <div className={`text-xl font-bold font-mono ${activeDetail.totalDelta >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-              最终合成指数: {activeDetail.totalDelta >= 0 ? '+' : ''}{activeDetail.totalDelta}
+              大限总战力: {activeDetail.totalDelta >= 0 ? '+' : ''}{activeDetail.totalDelta}
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {/* 模块一：原局老本 */}
-            <div className="p-3 rounded-lg bg-zinc-900 border border-zinc-800">
-               <div className="text-xs font-bold mb-2 flex justify-between items-center text-zinc-300">
-                <span>🗃️ 一：原局基石底分</span>
-                <span className="font-mono">{activeDetail.baseScore > 0 ? '+' : ''}{activeDetail.baseScore}</span>
-              </div>
-              <p className="text-[10px] text-zinc-500 leading-relaxed">
-                *物理追踪：在此大限，该领域转至【{activeDetail.physicalPalace}】。<br/>
-                *(已提取该物理宫位之天生吉凶基准分)。
-              </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* 一：原局星曜底分 (剔除了格局) */}
+            <div className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 flex flex-col justify-between">
+               <div>
+                 <div className="text-xs font-bold mb-2 flex justify-between items-center text-zinc-300">
+                  <span>🗃️ 一：原局星曜底分</span>
+                  <span className="font-mono text-emerald-300/80">{activeDetail.baseScore > 0 ? '+' : ''}{activeDetail.baseScore}</span>
+                </div>
+                <p className="text-[10px] text-zinc-500 leading-relaxed">
+                  {isOverall 
+                    ? '*十二宫底分总和。' 
+                    : `*追溯：物理落点【${activeDetail.physicalPalace}】，已提取其先天星曜吉凶分(剔除原局格局)。`}
+                </p>
+               </div>
             </div>
 
-            {/* 模块二：潜能觉醒 */}
-            <div className={`p-3 rounded-lg border ${activeDetail.activationScore > 0 ? 'bg-amber-950/20 border-amber-900/50' : 'bg-zinc-900 border-zinc-800'}`}>
-              <div className="text-xs font-bold mb-2 flex justify-between items-center text-amber-500/80">
-                <span>✨ 二：格局潜能觉醒</span>
-                <span className="font-mono">{activeDetail.activationScore > 0 ? '+' : ''}{activeDetail.activationScore}</span>
+            {/* 二：大运得位分 */}
+            <div className={`p-3 rounded-lg border flex flex-col justify-between ${activeDetail.domainScore !== 0 ? 'bg-indigo-950/20 border-indigo-900/50' : 'bg-zinc-900 border-zinc-800'}`}>
+              <div>
+                <div className="text-xs font-bold mb-2 flex justify-between items-center text-indigo-400/80">
+                  <span>🎯 二：大运得位加成</span>
+                  <span className="font-mono">{activeDetail.domainScore > 0 ? '+' : ''}{activeDetail.domainScore}</span>
+                </div>
+                {activeDetail.domainScore !== 0 ? (
+                  <ul className="space-y-1 mt-2 max-h-20 overflow-y-auto custom-scrollbar">
+                    {activeDetail.domainLogs.map((log, i) => (
+                      <li key={i} className="text-[10px] text-indigo-200/90 flex items-start leading-tight">
+                        <span className="mr-1.5 mt-0.5 opacity-60">»</span> {log}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="text-[10px] text-zinc-600 italic mt-2">未触发大运宫位得位环境。</div>
+                )}
               </div>
-              {activeDetail.activationScore > 0 ? (
-                <ul className="space-y-1 mt-2">
-                  {activeDetail.activationLogs.map((log, i) => (
-                    <li key={i} className="text-[10px] text-amber-200/90 flex items-start leading-tight">
-                      <span className="mr-1.5 mt-0.5 opacity-60">»</span> {log}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="text-[10px] text-zinc-600 italic mt-2">未触发潜伏格局得位。</div>
-              )}
             </div>
 
-            {/* 模块三：飞星环境引动 */}
-            <div className="p-3 rounded-lg bg-zinc-900 border border-zinc-800">
-              <div className="text-xs font-bold mb-2 flex justify-between items-center text-blue-400/80">
-                <span>🌪️ 三：飞星环境引动</span>
-                <span className={`font-mono ${activeDetail.flyInScore >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                  {activeDetail.flyInScore > 0 ? '+' : ''}{activeDetail.flyInScore}
-                </span>
+            {/* 三：格局潜能觉醒 */}
+            <div className={`p-3 rounded-lg border flex flex-col justify-between ${activeDetail.activationScore > 0 ? 'bg-amber-950/20 border-amber-900/50' : 'bg-zinc-900 border-zinc-800'}`}>
+              <div>
+                <div className="text-xs font-bold mb-2 flex justify-between items-center text-amber-500/80">
+                  <span>✨ 三：大运格局分</span>
+                  <span className="font-mono">{activeDetail.activationScore > 0 ? '+' : ''}{activeDetail.activationScore}</span>
+                </div>
+                {activeDetail.activationScore > 0 ? (
+                  <ul className="space-y-1 mt-2 max-h-20 overflow-y-auto custom-scrollbar">
+                    {activeDetail.activationLogs.map((log, i) => (
+                      <li key={i} className="text-[10px] text-amber-200/90 flex items-start leading-tight">
+                        <span className="mr-1.5 mt-0.5 opacity-60">»</span> {log}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="text-[10px] text-zinc-600 italic mt-2">未触发大限强宫的主场格局。</div>
+                )}
               </div>
-              {activeDetail.flyInLogs.length > 0 ? (
-                <ul className="space-y-1 h-20 overflow-y-auto pr-1 custom-scrollbar">
-                  {activeDetail.flyInLogs.map((log, i) => (
-                    <li key={i} className="text-[10px] text-zinc-400 flex justify-between border-b border-zinc-800/50 pb-0.5">
-                      <span className="truncate pr-2">{log.split(':')[0]}</span>
-                      <span className={`font-mono ${log.includes('+') ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {log.split(':')[1]}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="text-[10px] text-zinc-600 italic mt-2">未受显著四化吉煞引动。</div>
-              )}
+            </div>
+
+            {/* 四：大运吉煞星与四化叠加 */}
+            <div className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 flex flex-col justify-between">
+              <div>
+                <div className="text-xs font-bold mb-2 flex justify-between items-center text-blue-400/80">
+                  <span>🌪️ 四：大运四化叠加</span>
+                  <span className={`font-mono ${activeDetail.overlayScore >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                    {activeDetail.overlayScore > 0 ? '+' : ''}{activeDetail.overlayScore}
+                  </span>
+                </div>
+                {activeDetail.overlayLogs.length > 0 ? (
+                  <ul className="space-y-1 h-20 overflow-y-auto pr-1 custom-scrollbar">
+                    {activeDetail.overlayLogs.map((log, i) => (
+                      <li key={i} className="text-[10px] text-zinc-400 flex justify-between border-b border-zinc-800/50 pb-0.5">
+                        <span className="truncate pr-2">{log.split(':')[0]}</span>
+                        {log.includes(':') && (
+                          <span className={`font-mono ${log.includes('+') ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            {log.split(':')[1]}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="text-[10px] text-zinc-600 italic mt-2">未受大运四化吉煞显著引动。</div>
+                )}
+              </div>
             </div>
           </div>
         </div>
