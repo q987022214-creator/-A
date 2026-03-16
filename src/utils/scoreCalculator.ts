@@ -71,7 +71,7 @@ export const SCORE_RULES = {
   }
 };
 
-export function calculateChartScores(iztroData: any, patterns: PatternResult[] = []): PalaceScore[] {
+export function calculatePalaceScores(iztroData: any, patterns: PatternResult[] = []): PalaceScore[] {
   if (!iztroData || !iztroData.palaces) return [];
   const palaces = iztroData.palaces;
   const results: PalaceScore[] = [];
@@ -377,3 +377,5 @@ export function calculateChartScores(iztroData: any, patterns: PatternResult[] =
 
   return results.sort((a, b) => b.finalScore - a.finalScore);
 }
+
+export const calculateChartScores = calculatePalaceScores;
