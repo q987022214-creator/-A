@@ -10,6 +10,7 @@ import { buildAIPayload, DynamicContext } from '../utils/aiPromptBuilder';
 import { astro } from 'iztro'; 
 import { DateTimePickerModal } from './DateTimePickerModal';
 import PalaceScoreTable from './PalaceScoreTable';
+import TrendHistogram from './TrendHistogram';
 import { ChatBubble } from './ChatBubble';
 
 class ErrorBoundary extends React.Component<{ fallback: React.ReactNode, children: React.ReactNode }, { hasError: boolean }> {
@@ -43,6 +44,8 @@ interface Case {
   name: string;
   content: string;
   createdAt: number;
+  category?: string;
+  notes?: string;
 }
 
 export type ChartMemory = {
@@ -342,7 +345,7 @@ export default function ChatRoom() {
     setActiveChartText(pureJsonStr); 
     
     const name = `[${nativeName}] ${calendarType === 'lunar' ? '农历' : '公历'} ${nativeDate} ${nativeTime} (${adjusted.branch})`;
-    const newCases = [...cases, { id: Date.now().toString(), name, content: pureJsonStr, createdAt: Date.now() }];
+    const newCases = [...cases, { id: Date.now().toString(), name, content: pureJsonStr, createdAt: Date.now(), category: '未分类' }];
     setCases(newCases);
 
     const aiPayload = buildAIPayload(chartData);
@@ -466,7 +469,7 @@ export default function ChatRoom() {
   const executeSaveChart = () => {
     if (!tempChartName.trim()) return;
     const finalContent = JSON.stringify(parseWenMoTianJiToJSON(chartText), null, 2);
-    const newCases = [...cases, { id: Date.now().toString(), name: tempChartName.trim(), content: finalContent, createdAt: Date.now() }];
+    const newCases = [...cases, { id: Date.now().toString(), name: tempChartName.trim(), content: finalContent, createdAt: Date.now(), category: '未分类' }];
     setCases(newCases);
     alert("✅ 保存成功！"); setChartText(''); setShowSavePrompt(false);
   };
@@ -582,6 +585,7 @@ export default function ChatRoom() {
   const handleDeleteCase = (id: string) => {
     setCases(cases.filter(c => c.id !== id));
     setSelectedCaseIds(selectedCaseIds.filter(selectedId => selectedId !== id));
+    setMemories(memories.filter(m => m.chartId !== id));
   };
 
   return (
@@ -592,13 +596,13 @@ export default function ChatRoom() {
           <button onClick={() => setMobileView('chat')} className={`flex-1 py-2 text-sm rounded-md ${mobileView === 'chat' ? 'bg-zinc-800 text-emerald-400' : 'text-zinc-500'}`}>聊天</button>
         </div>
       )}
-      <div className={`w-full lg:w-[60%] xl:w-[65%] h-[40vh] sm:h-[50vh] lg:h-full flex-shrink-0 bg-gray-50 dark:bg-gray-900 rounded-lg shadow-inner overflow-hidden flex flex-col border border-zinc-800 relative ${isMobile && mobileView !== 'chart' ? 'hidden' : ''}`}>
+      <div className={`w-full lg:w-[60%] xl:w-[65%] h-[40vh] sm:h-[50vh] lg:h-full flex-shrink-0 bg-zinc-900 rounded-lg shadow-inner overflow-hidden flex flex-col border border-zinc-800 relative ${isMobile && mobileView !== 'chart' ? 'hidden' : ''}`}>
         <div className="bg-zinc-950 border-b border-zinc-800 p-1 flex justify-center">
           <div className="flex bg-zinc-900 rounded-lg p-0.5 w-full max-w-[280px] border border-zinc-800/50">
-            <button onClick={() => setLeftPanelView('astrolabe')} className={`flex-1 flex items-center justify-center gap-1.5 py-1 text-[10px] font-medium rounded-md transition-all duration-200 ${leftPanelView === 'astrolabe' ? 'bg-[#2d313a] text-emerald-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}>
+            <button onClick={() => setLeftPanelView('astrolabe')} className={`flex-1 flex items-center justify-center gap-1.5 py-1 text-[10px] font-medium rounded-md transition-all duration-200 ${leftPanelView === 'astrolabe' ? 'bg-zinc-800 text-emerald-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}>
               <Compass size={12} /> 命盘视图
             </button>
-            <button onClick={() => setLeftPanelView('score')} className={`flex-1 flex items-center justify-center gap-1.5 py-1 text-[10px] font-medium rounded-md transition-all duration-200 ${leftPanelView === 'score' ? 'bg-[#2d313a] text-emerald-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}>
+            <button onClick={() => setLeftPanelView('score')} className={`flex-1 flex items-center justify-center gap-1.5 py-1 text-[10px] font-medium rounded-md transition-all duration-200 ${leftPanelView === 'score' ? 'bg-zinc-800 text-emerald-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}>
               <LayoutDashboard size={12} /> 量化分析
             </button>
           </div>
@@ -637,7 +641,12 @@ export default function ChatRoom() {
               {renderTimeMachine()}
             </>
           ) : (
-            <PalaceScoreTable iztroData={activeChartText} />
+            <div className="w-full h-full flex flex-col overflow-y-auto p-4">
+              {/* 🔌 这里就是插入直方图的地方！ */}
+              <TrendHistogram iztroData={activeChartText} />
+              
+              <PalaceScoreTable iztroData={activeChartText} />
+            </div>
           )}
         </div>
       </div>
@@ -789,7 +798,14 @@ export default function ChatRoom() {
                     <label key={c.id} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${selectedCaseIds.includes(c.id) ? 'bg-emerald-900/20 border-emerald-500/50' : 'bg-zinc-950/50 border-zinc-800 hover:border-zinc-700'}`}>
                       <input type="checkbox" className="mt-1 w-4 h-4 rounded border-zinc-700 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-zinc-900 bg-zinc-900" checked={selectedCaseIds.includes(c.id)} onChange={() => handleToggleCaseSelection(c.id)}/>
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-zinc-200">{c.name}</div>
+                        <div className="flex items-center gap-2">
+                          <div className="text-sm font-medium text-zinc-200">{c.name}</div>
+                          {c.category && c.category !== '未分类' && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded">
+                              {c.category}
+                            </span>
+                          )}
+                        </div>
                         <div className="text-xs text-zinc-500 mt-1">{new Date(c.createdAt).toLocaleString()}</div>
                       </div>
                       <button 

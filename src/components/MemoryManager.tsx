@@ -15,6 +15,8 @@ interface Case {
   name: string;
   content: string;
   createdAt: number;
+  category?: string;
+  notes?: string;
 }
 
 export default function MemoryManager() {

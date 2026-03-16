@@ -308,7 +308,7 @@ export function calculateChartScores(iztroData: any, patterns: PatternResult[] =
       heavenlyStem: pData.heavenlyStem || '',
       baseScore,
       originalBaseScore: 0,
-      patternScore: pScore,
+      patternScore: Number(pScore.toFixed(1)),
       matrixScore: 0,
       finalScore: 0,
       baseBreakdowns,
@@ -371,7 +371,8 @@ export function calculateChartScores(iztroData: any, patterns: PatternResult[] =
     }
     
     // 最终战力 = 纯净矩阵 + 高维格局
-    cur.finalScore = cur.matrixScore + cur.patternScore;
+    cur.matrixScore = Number(cur.matrixScore.toFixed(1));
+    cur.finalScore = Number((cur.matrixScore + cur.patternScore).toFixed(1));
   }
 
   return results.sort((a, b) => b.finalScore - a.finalScore);

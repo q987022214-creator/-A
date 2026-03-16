@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Database, GitMerge, Sliders, PlaySquare, Hexagon, MessageSquare, Settings, Brain, Menu, X } from 'lucide-react';
+import { Database, GitMerge, Sliders, PlaySquare, Hexagon, MessageSquare, Settings, Brain, Menu, X, FolderOpen } from 'lucide-react';
 import ApiSettingsModal from './ApiSettingsModal';
 
-export type TabType = 'chat' | 'memory' | 'fuel' | 'rules' | 'weights' | 'sandbox';
+export type TabType = 'chat' | 'memory' | 'fuel' | 'rules' | 'weights' | 'sandbox' | 'cases';
 
 interface SidebarProps {
   activeTab: TabType;
@@ -16,6 +16,7 @@ export default function Sidebar({ activeTab, setActiveTab, isMobile }: SidebarPr
 
   const tabs = [
     { id: 'chat', label: '对话', icon: MessageSquare },
+    { id: 'cases', label: '命例', icon: FolderOpen },
     { id: 'memory', label: '记忆', icon: Brain },
     { id: 'fuel', label: '断语', icon: Database },
     { id: 'rules', label: '规则', icon: GitMerge },

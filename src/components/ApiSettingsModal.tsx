@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Save, Plug, Loader2 } from 'lucide-react';
+import { X, Save, Plug, Loader2, Moon, Sun } from 'lucide-react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 
 interface ApiSettingsModalProps {
@@ -13,8 +13,10 @@ export default function ApiSettingsModal({ isOpen, onClose }: ApiSettingsModalPr
     apiKey: '',
     model: 'deepseek-chat'
   });
+  const [theme, setTheme] = useLocalStorage<'dark' | 'light'>('ziwei_theme', 'dark');
 
   const [localSettings, setLocalSettings] = useState(settings);
+  const [localTheme, setLocalTheme] = useState(theme);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ type: 'success' | 'error', message: string } | null>(null);
 
@@ -22,6 +24,7 @@ export default function ApiSettingsModal({ isOpen, onClose }: ApiSettingsModalPr
 
   const handleSave = () => {
     setSettings(localSettings);
+    setTheme(localTheme);
     onClose();
   };
 
@@ -77,13 +80,46 @@ export default function ApiSettingsModal({ isOpen, onClose }: ApiSettingsModalPr
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl w-full max-w-md overflow-hidden shadow-2xl">
         <div className="flex justify-between items-center p-4 border-b border-zinc-800/50 bg-zinc-950/50">
-          <h3 className="text-lg font-medium text-zinc-200">API 设置</h3>
+          <h3 className="text-lg font-medium text-zinc-200">系统设置</h3>
           <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 transition-colors">
             <X size={20} />
           </button>
         </div>
         
         <div className="p-6 space-y-5">
+          {/* Theme Toggle */}
+          <div>
+            <label className="block text-xs font-medium text-zinc-400 mb-2 uppercase tracking-wider">
+              界面主题
+            </label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setLocalTheme('dark')}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md border text-sm font-medium transition-all ${
+                  localTheme === 'dark' 
+                    ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400' 
+                    : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700'
+                }`}
+              >
+                <Moon size={16} />
+                深色模式
+              </button>
+              <button
+                onClick={() => setLocalTheme('light')}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md border text-sm font-medium transition-all ${
+                  localTheme === 'light' 
+                    ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400' 
+                    : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700'
+                }`}
+              >
+                <Sun size={16} />
+                浅色模式
+              </button>
+            </div>
+          </div>
+
+          <div className="h-px bg-zinc-800/50 my-2"></div>
+
           {testResult && (
             <div className={`p-3 rounded-md text-sm ${
               testResult.type === 'success' 

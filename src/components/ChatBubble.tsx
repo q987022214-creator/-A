@@ -62,7 +62,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, onExtractFuel }
 
               {isPayloadOpen && (
                 <div className="p-3 border-t border-emerald-500/20 bg-black">
-                  <pre className="text-[10px] font-mono text-zinc-400 overflow-x-auto custom-scrollbar max-h-64 whitespace-pre-wrap select-all">
+                  <pre className="text-[10px] font-mono text-emerald-500/80 overflow-x-auto custom-scrollbar max-h-64 whitespace-pre-wrap select-all">
                     <code>{message.payload}</code>
                   </pre>
                 </div>
