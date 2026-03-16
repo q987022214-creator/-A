@@ -7,14 +7,14 @@ export interface DynamicPalaceDelta {
   logs: string[];
 }
 
-// 辅助：获取十二地支索引
-const BRANCHES = ["子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥"];
-const getBranchIndex = (branch: string) => BRANCHES.indexOf(branch);
+export interface LifeTrendMatrix {
+  palaceTrends: number[][]; 
+  overallTrends: number[];  
+  decadeLabels: string[];   
+}
 
-// 辅助：我宫与他宫定义
 const SELF_PALACES = ['命宫', '财帛宫', '官禄宫', '田宅宫', '疾厄宫', '福德宫'];
 
-// 辅助：天干对应四化 (禄, 权, 科, 忌)
 const SIHUA_MAP: Record<string, string[]> = {
   '甲': ['廉贞', '破军', '武曲', '太阳'], '乙': ['天机', '天梁', '紫微', '太阴'],
   '丙': ['天同', '天机', '文昌', '廉贞'], '丁': ['太阴', '天同', '天机', '巨门'],
@@ -23,229 +23,161 @@ const SIHUA_MAP: Record<string, string[]> = {
   '壬': ['天梁', '紫微', '左辅', '武曲'], '癸': ['破军', '巨门', '太阴', '贪狼']
 };
 
-// 辅助：动态星曜落点推演
+// 🚀 修复点 1：返回真实的十二地支字符串，杜绝数字索引错位！
 const getDecadeStarsLocations = (stem: string, branch: string) => {
-  const yangTuoMap: Record<string, number[]> = { // [羊, 陀]
-    '甲': [3, 1], '乙': [4, 2], '丙': [6, 4], '丁': [7, 5], '戊': [6, 4],
-    '己': [7, 5], '庚': [9, 7], '辛': [10, 8], '壬': [0, 10], '癸': [1, 11]
+  const yangTuoMap: Record<string, string[]> = { 
+    '甲': ['卯', '丑'], '乙': ['辰', '寅'], '丙': ['午', '辰'], '丁': ['未', '巳'], '戊': ['午', '辰'],
+    '己': ['未', '巳'], '庚': ['酉', '未'], '辛': ['戌', '申'], '壬': ['子', '戌'], '癸': ['丑', '亥']
   };
-  const kuiYueMap: Record<string, number[]> = { // [魁, 钺]
-    '甲': [1, 7], '戊': [1, 7], '庚': [1, 7], '乙': [0, 8], '己': [0, 8], 
-    '丙': [11, 9], '丁': [11, 9], '辛': [6, 2], '壬': [3, 5], '癸': [3, 5]
+  const kuiYueMap: Record<string, string[]> = { 
+    '甲': ['丑', '未'], '戊': ['丑', '未'], '庚': ['丑', '未'],
+    '乙': ['子', '申'], '己': ['子', '申'], '丙': ['亥', '酉'], '丁': ['亥', '酉'],
+    '辛': ['午', '寅'], '壬': ['卯', '巳'], '癸': ['卯', '巳']
   };
-  const maMap: Record<string, number> = {
-    '申': 2, '子': 2, '辰': 2, '寅': 8, '午': 8, '戌': 8,
-    '亥': 5, '卯': 5, '未': 5, '巳': 11, '酉': 11, '丑': 11
-  };
-  const luCunMap: Record<string, number> = {
-    '甲': 2, '乙': 3, '丙': 5, '戊': 5, '丁': 6, '己': 6, '庚': 8, '辛': 9, '壬': 11, '癸': 0
+  const maMap: Record<string, string> = {
+    '寅': '申', '午': '申', '戌': '申', '申': '寅', '子': '寅', '辰': '寅',
+    '巳': '亥', '酉': '亥', '丑': '亥', '亥': '巳', '卯': '巳', '未': '巳'
   };
 
   return {
-    luCun: luCunMap[stem],
-    yang: yangTuoMap[stem]?.[0],
-    tuo: yangTuoMap[stem]?.[1],
-    kui: kuiYueMap[stem]?.[0],
-    yue: kuiYueMap[stem]?.[1],
-    ma: maMap[branch],
-    sihua: SIHUA_MAP[stem] || []
+    yang: yangTuoMap[stem]?.[0], tuo: yangTuoMap[stem]?.[1],
+    kui: kuiYueMap[stem]?.[0], yue: kuiYueMap[stem]?.[1],
+    ma: maMap[branch], sihua: SIHUA_MAP[stem] || []
   };
 };
 
-// 辅助：判断是否在三方四正 (0: 同宫, 1: 对宫, 2: 三方, -1: 无关)
 const getSpatialRelation = (idxA: number, idxB: number) => {
+  if (idxA === -1 || idxB === -1) return -1;
   if (idxA === idxB) return 0;
   if (Math.abs(idxA - idxB) === 6) return 1;
   if (Math.abs(idxA - idxB) === 4 || Math.abs(idxA - idxB) === 8) return 2;
   return -1;
 };
 
-// 辅助：亮度判断 (仅针对羊陀等有亮度的煞曜)
-const getBrightnessScore = (starName: string, branchIdx: number) => {
-  if (starName === '擎羊' || starName === '陀罗') {
-    // 辰戌丑未为庙旺(+1)，子午卯酉/寅申巳亥为陷(-1)
-    if ([1, 4, 7, 10].includes(branchIdx)) return 1;
-    return -1; 
-  }
-  // 其他星曜的亮度算法可根据需要扩展，此处遵照“无亮度不参与”原则
-  return 0;
+const getBrightnessScore = (branchName: string) => {
+  if (['辰', '戌', '丑', '未'].includes(branchName)) return 1;
+  return -1; 
 };
 
 export function calculateDecadeDelta(basePalaces: any[], decadeStem: string, decadeBranch: string): DynamicPalaceDelta[] {
   const deltas: DynamicPalaceDelta[] = Array.from({ length: 12 }).map((_, i) => ({
-    palaceIndex: i,
-    palaceName: basePalaces[i].name.replace('宫', '') + '宫',
-    deltaScore: 0,
-    logs: []
+    palaceIndex: i, palaceName: basePalaces[i].name.replace('宫', '') + '宫', deltaScore: 0, logs: []
   }));
 
   const addScore = (idx: number, score: number, reason: string) => {
-    if (score === 0) return;
+    if (idx === -1 || score === 0) return;
     deltas[idx].deltaScore += score;
     deltas[idx].logs.push(`${reason}: ${score > 0 ? '+' : ''}${score}`);
   };
 
-  const decLocs = getDecadeStarsLocations(decadeStem, decadeBranch);
-
-  // 1. 寻找原局星曜位置
-  const findOriginalStar = (starName: string) => {
-    return basePalaces.findIndex(p => {
-      const allStars = [...(p.majorStars || []), ...(p.minorStars || [])];
-      return allStars.some(s => s.name === starName || (starName === '化禄' && s.mutagen === '禄') || (starName === '化忌' && s.mutagen === '忌'));
-    });
+  // 🚀 修复点 2：三方四正涟漪引力波引擎！
+  // 当一颗星落入某宫，不仅本宫加分，对宫(80%)、三合(50%)全部联动！彻底消灭 0 分死水！
+  const addScoreSFSZ = (targetIdx: number, baseScore: number, reason: string) => {
+    if (targetIdx === -1) return;
+    addScore(targetIdx, baseScore, `${reason}(本宫)`);
+    addScore((targetIdx + 6) % 12, Number((baseScore * 0.8).toFixed(1)), `${reason}(对宫辐射)`);
+    addScore((targetIdx + 4) % 12, Number((baseScore * 0.5).toFixed(1)), `${reason}(三方辐射)`);
+    addScore((targetIdx + 8) % 12, Number((baseScore * 0.5).toFixed(1)), `${reason}(三方辐射)`);
   };
 
-  const origKui = findOriginalStar('天魁');
-  const origYue = findOriginalStar('天钺');
-  const origYang = findOriginalStar('擎羊');
-  const origTuo = findOriginalStar('陀罗');
-  const origLu = findOriginalStar('化禄'); // 原局化禄
-  const origLuCun = findOriginalStar('禄存');
-  const origJi = findOriginalStar('化忌');
+  const decLocs = getDecadeStarsLocations(decadeStem, decadeBranch);
 
-  const origLuPositions = [origLu, origLuCun].filter(idx => idx !== -1);
+  const getIdxByBranch = (b: string) => basePalaces.findIndex(p => p.earthlyBranch === b);
+  const getIdxByStar = (sName: string) => basePalaces.findIndex(p => {
+    const all = [...(p.majorStars||[]), ...(p.minorStars||[])];
+    return all.some(s => s.name === sName || (sName==='化禄' && s.mutagen==='禄') || (sName==='化忌' && s.mutagen==='忌'));
+  });
 
-  // 2. 核心遍历：计算大限各宫位的动态增减分
-  for (let i = 0; i < 12; i++) {
-    const isSelfPalace = SELF_PALACES.includes(deltas[i].palaceName);
+  const oKui = getIdxByStar('天魁'), oYue = getIdxByStar('天钺');
+  const oYang = getIdxByStar('擎羊'), oTuo = getIdxByStar('陀罗');
+  const oLu = getIdxByStar('化禄'), oLuCun = getIdxByStar('禄存');
+  const oJi = getIdxByStar('化忌'), oQuan = getIdxByStar('化权'), oKe = getIdxByStar('化科');
 
-    // =====================================
-    // 模块 A：大限吉星自身与原局叠加 (以魁钺、禄马为例)
-    // =====================================
-    const hasDecKui = decLocs.kui === i;
-    const hasDecYue = decLocs.yue === i;
-    
-    // 吉星单见与亮度
-    if (hasDecKui) addScore(i, 3 + getBrightnessScore('天魁', i), "大限吉星(魁)本宫单见");
-    if (hasDecYue) addScore(i, 3 + getBrightnessScore('天钺', i), "大限吉星(钺)本宫单见");
+  const dKui = getIdxByBranch(decLocs.kui), dYue = getIdxByBranch(decLocs.yue);
+  const dYang = getIdxByBranch(decLocs.yang), dTuo = getIdxByBranch(decLocs.tuo);
+  
+  const dLu = getIdxByStar(decLocs.sihua[0]);
+  const dQuan = getIdxByStar(decLocs.sihua[1]);
+  const dKe = getIdxByStar(decLocs.sihua[2]);
+  const dJi = getIdxByStar(decLocs.sihua[3]);
 
-    // 吉星大限与原局叠加
-    if (hasDecKui || hasDecYue) {
-      const decStarName = hasDecKui ? "限魁" : "限钺";
-      // 同本宫
-      if (origKui === i || origYue === i) {
-        const origStarName = origKui === i ? "原魁" : "原钺";
-        const score = (origStarName === "原魁" && decStarName === "限魁") || (origStarName === "原钺" && decStarName === "限钺") ? 4 : 6;
-        addScore(i, score, `吉星同本宫(${origStarName}+${decStarName})`);
-      }
-      // 本对与本三方
-      if (getSpatialRelation(origKui, i) === 1) addScore(i, 3, `吉星本宫-对宫(原魁+${decStarName})`);
-      if (getSpatialRelation(origYue, i) === 1) addScore(i, 3, `吉星本宫-对宫(原钺+${decStarName})`);
-      if (getSpatialRelation(origKui, i) === 2) {
-        addScore(i, decStarName === "限魁" ? 1 : 2, `吉星本宫-三方(原魁+${decStarName})`);
-      }
-      if (getSpatialRelation(origYue, i) === 2) {
-        addScore(i, decStarName === "限钺" ? 1 : 2, `吉星本宫-三方(原钺+${decStarName})`);
-      }
-    }
+  // === 1. 大限吉星引动 ===
+  if (dKui !== -1) addScoreSFSZ(dKui, 3 + getBrightnessScore(basePalaces[dKui].earthlyBranch), "大限天魁");
+  if (dYue !== -1) addScoreSFSZ(dYue, 3 + getBrightnessScore(basePalaces[dYue].earthlyBranch), "大限天钺");
+  
+  if (dKui === oKui) addScore(dKui, 4, "原魁+限魁(同宫叠加)");
+  if (dYue === oYue) addScore(dYue, 4, "原钺+限钺(同宫叠加)");
+  if (dKui === oYue) addScore(dKui, 6, "原钺+限魁(完美交会)");
 
-    // =====================================
-    // 模块 B：大限煞星自身与原局叠加 (羊陀)
-    // =====================================
-    const hasDecYang = decLocs.yang === i;
-    const hasDecTuo = decLocs.tuo === i;
+  // === 2. 大限煞星引动 ===
+  if (dYang !== -1) addScoreSFSZ(dYang, -3 + getBrightnessScore(basePalaces[dYang].earthlyBranch), "大限擎羊");
+  if (dTuo !== -1) addScoreSFSZ(dTuo, -3 + getBrightnessScore(basePalaces[dTuo].earthlyBranch), "大限陀罗");
 
-    // 煞星单见与亮度
-    if (hasDecYang) addScore(i, -3 + getBrightnessScore('擎羊', i), "大限煞星(羊)本宫单见");
-    if (hasDecTuo) addScore(i, -3 + getBrightnessScore('陀罗', i), "大限煞星(陀)本宫单见");
+  if (dYang === oYang) addScore(dYang, -4, "原羊+限羊(叠煞)");
+  if (dTuo === oTuo) addScore(dTuo, -4, "原陀+限陀(叠煞)");
+  if (dYang === oTuo) addScore(dYang, -6, "原陀+限羊(极凶重叠)");
 
-    // 煞星大限与原局叠加 (叠煞)
-    if (hasDecYang || hasDecTuo) {
-      const decBadName = hasDecYang ? "限羊" : "限陀";
-      if (origYang === i) {
-        const score = decBadName === "限羊" ? -4 : -6;
-        addScore(i, score, `煞星同本宫(原羊+${decBadName})`);
-      }
-      if (origTuo === i) {
-        const score = decBadName === "限陀" ? -4 : -6;
-        addScore(i, score, `煞星同本宫(原陀+${decBadName})`);
-      }
-
-      if (getSpatialRelation(origYang, i) === 1) addScore(i, -3, `煞星本宫-对宫(原羊+${decBadName})`);
-      if (getSpatialRelation(origYang, i) === 2) addScore(i, decBadName === "限羊" ? -1 : -2, `煞星本宫-三方(原羊+${decBadName})`);
-    }
-
-    // =====================================
-    // 模块 C：大限四化动态计分
-    // =====================================
-    const findSihuaStar = (starName: string) => basePalaces[i].majorStars?.some((s:any) => s.name.includes(starName));
-    
-    const isLu = findSihuaStar(decLocs.sihua[0]);
-    const isQuan = findSihuaStar(decLocs.sihua[1]);
-    const isKe = findSihuaStar(decLocs.sihua[2]);
-    const isJi = findSihuaStar(decLocs.sihua[3]);
-
-    // 1. 基础赋分
-    if (isLu) addScore(i, 10, "大限化禄(丰收/顺利)");
-    if (isQuan) addScore(i, 7, "大限化权(掌控/奋斗)");
-    if (isKe) addScore(i, 5, "大限化科(名声/贵人)");
-    if (isJi) addScore(i, isSelfPalace ? -3 : -5, `大限化忌(${isSelfPalace ? '我宫' : '他宫'})`);
-
-    // 2. 四化叠加原局四化
-    if (isLu && origLuPositions.includes(i)) addScore(i, 10, "原禄限禄同宫相遇");
-    if (isLu && origLuPositions.some(pos => getSpatialRelation(pos, i) === 1)) addScore(i, 8, "原禄限禄本对相遇");
-    if (isLu && origLuPositions.some(pos => getSpatialRelation(pos, i) === 2)) addScore(i, 5, "原禄限禄本三相遇");
-
-    if (isQuan && findOriginalStar('化权') === i) addScore(i, 7, "原权限权同宫相遇");
-    if (isKe && findOriginalStar('化科') === i) addScore(i, 5, "原科限科同宫相遇");
-
-    if (isJi && origJi === i) addScore(i, -10, "原忌限忌同宫相遇");
-    if (isJi && getSpatialRelation(origJi, i) === 1) addScore(i, -8, "原忌限忌本对相遇");
-    if (isJi && getSpatialRelation(origJi, i) === 2) addScore(i, -5, "原忌限忌本三相遇");
-
-    // 3. 禄忌交战特殊规则
-    if (origLuPositions.includes(i) && isJi) addScore(i, -8, "原禄+限忌 同宫(禄逢冲破)");
-    if (origJi === i && isLu) addScore(i, -4, "原忌+限禄 同宫(绝处逢生)");
-    if (isLu && isJi) addScore(i, -8, "限禄+限忌 同宫(大限自战)");
+  // === 3. 大限四化引动 ===
+  if (dLu !== -1) addScoreSFSZ(dLu, 10, "大限化禄");
+  if (dQuan !== -1) addScoreSFSZ(dQuan, 7, "大限化权");
+  if (dKe !== -1) addScoreSFSZ(dKe, 5, "大限化科");
+  if (dJi !== -1) {
+    const isSelf = SELF_PALACES.includes(basePalaces[dJi].name.replace('宫', '') + '宫');
+    addScoreSFSZ(dJi, isSelf ? -3 : -5, `大限化忌(${isSelf ? '我宫' : '他宫'})`);
   }
+
+  // === 4. 四化交战与共振 ===
+  if (dLu !== -1) {
+    if (dLu === oLu || dLu === oLuCun) addScore(dLu, 10, "原禄+限禄(同宫叠加)");
+    else if (getSpatialRelation(dLu, oLu) === 1) addScore(dLu, 8, "原禄+限禄(本对相遇)");
+    else if (getSpatialRelation(dLu, oLu) === 2) addScore(dLu, 5, "原禄+限禄(三方相遇)");
+  }
+  if (dQuan !== -1) {
+    if (dQuan === oQuan) addScore(dQuan, 7, "原权+限权(同宫)");
+    else if (getSpatialRelation(dQuan, oQuan) === 1) addScore(dQuan, 5, "原权+限权(本对)");
+  }
+  if (dKe !== -1) {
+    if (dKe === oKe) addScore(dKe, 5, "原科+限科(同宫)");
+  }
+  if (dJi !== -1) {
+    if (dJi === oJi) addScore(dJi, -10, "原忌+限忌(同宫核爆)");
+    else if (getSpatialRelation(dJi, oJi) === 1) addScore(dJi, -8, "原忌+限忌(本对冲破)");
+  }
+
+  // === 5. 禄忌交战 ===
+  if (dJi !== -1 && (dJi === oLu || dJi === oLuCun)) addScore(dJi, -8, "原禄+限忌(禄逢冲破)");
+  if (dLu !== -1 && dLu === oJi) addScore(dLu, -4, "原忌+限禄(绝处逢生)");
+  if (dLu !== -1 && dLu === dJi) addScore(dLu, -8, "限禄+限忌(大限自战)");
 
   return deltas;
 }
 
-export interface LifeTrendMatrix {
-  palaceTrends: number[][]; // 12宫 x 10个大限 的增量分数矩阵
-  overallTrends: number[];  // 10个大限的综合大盘走势（运限命财官总和）
-  decadeLabels: string[];   // 大限的标签，例如 ["2-11岁", "12-21岁"...]
-}
-
-/**
- * 🚀 全息生命走势矩阵生成器
- * @param basePalaces 原局12宫数据
- * @param decades Iztro提取的大限数组 (长度通常为10或12)
- * @returns 包含12宫起伏与综合走势的数据矩阵
- */
 export function generateLifeTrendMatrix(basePalaces: any[], decades: any[]): LifeTrendMatrix {
-  // 初始化 12 宫，每宫 10 个阶段的数组
   const palaceTrends = Array.from({ length: 12 }).map(() => Array(10).fill(0));
   const overallTrends = Array(10).fill(0);
   const decadeLabels: string[] = [];
 
-  // 只取前 10 个大限（百年人生）
   const validDecades = decades.slice(0, 10);
 
   validDecades.forEach((dec, decadeIndex) => {
     decadeLabels.push(`${dec.range[0]}-${dec.range[1]}岁`);
     
-    // 调用上一回合我们写好的核心引擎，算出这个大限的 12 宫变化分
+    // 算分！
     const deltas = calculateDecadeDelta(basePalaces, dec.heavenlyStem, dec.earthlyBranch);
 
     deltas.forEach((d, pIdx) => {
-      palaceTrends[pIdx][decadeIndex] = d.deltaScore;
+      palaceTrends[pIdx][decadeIndex] = Number(d.deltaScore.toFixed(1));
     });
 
-    // 综合大盘走势：大限的【命宫】+【财帛宫】+【官禄宫】增量之和
-    // 寻找大限命宫落在哪个地支
-    const decLifeBranch = dec.earthlyBranch;
-    const decLifeIdx = getBranchIndex(decLifeBranch);
-    const decWealthIdx = (decLifeIdx + 4) % 12;
-    const decCareerIdx = (decLifeIdx + 8) % 12;
-
-    const currentDecadeOverall = 
-      deltas[decLifeIdx].deltaScore * 1.5 + // 命宫权重大
-      deltas[decWealthIdx].deltaScore + 
-      deltas[decCareerIdx].deltaScore;
-    
-    overallTrends[decadeIndex] = Number(currentDecadeOverall.toFixed(1));
+    const getIdxByBranch = (b: string) => basePalaces.findIndex(p => p.earthlyBranch === b);
+    const decLifeIdx = getIdxByBranch(dec.earthlyBranch);
+    if (decLifeIdx !== -1) {
+      const decWealthIdx = (decLifeIdx + 4) % 12;
+      const decCareerIdx = (decLifeIdx + 8) % 12;
+      // 综合大盘 = 命宫(x1.5) + 财帛 + 官禄
+      const currentDecadeOverall = deltas[decLifeIdx].deltaScore * 1.5 + deltas[decWealthIdx].deltaScore + deltas[decCareerIdx].deltaScore;
+      overallTrends[decadeIndex] = Number(currentDecadeOverall.toFixed(1));
+    }
   });
 
   return { palaceTrends, overallTrends, decadeLabels };
