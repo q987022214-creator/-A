@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
-import { Save, CheckCircle2, ChevronDown, ChevronUp, BookOpen, GitMerge } from 'lucide-react';
+import { Save, CheckCircle2, ChevronDown, ChevronUp, BookOpen, GitMerge, Trash2, Plus } from 'lucide-react';
 
 type SchoolType = 'Zhongzhou' | 'FlyingStar' | 'Hybrid';
 
@@ -16,7 +16,7 @@ interface SchoolData {
   steps: Step[];
 }
 
-const SCHOOLS: Record<SchoolType, SchoolData> = {
+const DEFAULT_SCHOOLS: Record<SchoolType, SchoolData> = {
   Zhongzhou: {
     name: '中州派 (Zhongzhou)',
     description: '注重星曜赋性与格局，强调三方四正的星系组合与多宫联动。',
@@ -88,7 +88,10 @@ const SCHOOLS: Record<SchoolType, SchoolData> = {
 };
 
 export default function RuleEditor() {
-  const [activeRule, setActiveRule] = useLocalStorage<SchoolData | null>('ziwei_active_rule', SCHOOLS.Zhongzhou);
+  const [savedSchools, setSavedSchools] = useLocalStorage<Record<SchoolType, SchoolData>>('ziwei_saved_schools', DEFAULT_SCHOOLS);
+  const [activeRule, setActiveRule] = useLocalStorage<SchoolData | null>('ziwei_active_rule', DEFAULT_SCHOOLS.Zhongzhou);
+  
+  const [localSchools, setLocalSchools] = useState<Record<SchoolType, SchoolData>>(savedSchools);
   const [selectedSchool, setSelectedSchool] = useState<SchoolType>('Zhongzhou');
   const [savedStatus, setSavedStatus] = useState(false);
   const [expandedSteps, setExpandedSteps] = useState<Record<string, boolean>>({
@@ -101,9 +104,13 @@ export default function RuleEditor() {
   });
 
   useEffect(() => {
+    setLocalSchools(savedSchools);
+  }, [savedSchools]);
+
+  useEffect(() => {
     if (activeRule) {
-      const schoolKey = Object.keys(SCHOOLS).find(
-        key => SCHOOLS[key as SchoolType].name === activeRule.name
+      const schoolKey = Object.keys(localSchools).find(
+        key => localSchools[key as SchoolType].name === activeRule.name
       ) as SchoolType;
       if (schoolKey) {
         setSelectedSchool(schoolKey);
@@ -116,7 +123,7 @@ export default function RuleEditor() {
     setSelectedSchool(school);
     // Expand all steps for the new school by default
     const newExpanded: Record<string, boolean> = {};
-    SCHOOLS[school].steps.forEach(step => {
+    localSchools[school].steps.forEach(step => {
       newExpanded[step.id] = true;
     });
     setExpandedSteps(newExpanded);
@@ -129,24 +136,70 @@ export default function RuleEditor() {
     }));
   };
 
+  const handleStepChange = (stepId: string, field: 'title' | 'description', value: string) => {
+    setLocalSchools(prev => {
+      const school = prev[selectedSchool];
+      const newSteps = school.steps.map(s => s.id === stepId ? { ...s, [field]: value } : s);
+      return {
+        ...prev,
+        [selectedSchool]: { ...school, steps: newSteps }
+      };
+    });
+  };
+
+  const handleSchoolDescriptionChange = (value: string) => {
+    setLocalSchools(prev => ({
+      ...prev,
+      [selectedSchool]: { ...prev[selectedSchool], description: value }
+    }));
+  };
+
+  const handleAddStep = () => {
+    const newStepId = `step-${Date.now()}`;
+    setLocalSchools(prev => {
+      const school = prev[selectedSchool];
+      const newStep: Step = {
+        id: newStepId,
+        title: '新步骤',
+        description: '步骤描述...'
+      };
+      return {
+        ...prev,
+        [selectedSchool]: { ...school, steps: [...school.steps, newStep] }
+      };
+    });
+    setExpandedSteps(prev => ({ ...prev, [newStepId]: true }));
+  };
+
+  const handleRemoveStep = (stepId: string) => {
+    setLocalSchools(prev => {
+      const school = prev[selectedSchool];
+      return {
+        ...prev,
+        [selectedSchool]: { ...school, steps: school.steps.filter(s => s.id !== stepId) }
+      };
+    });
+  };
+
   const handleSave = () => {
-    setActiveRule(SCHOOLS[selectedSchool]);
+    setSavedSchools(localSchools);
+    setActiveRule(localSchools[selectedSchool]);
     setSavedStatus(true);
     setTimeout(() => setSavedStatus(false), 2000);
   };
 
-  const currentSchoolData = SCHOOLS[selectedSchool];
+  const currentSchoolData = localSchools[selectedSchool];
 
   return (
     <div className="flex flex-col h-full">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-2xl font-semibold text-zinc-100 tracking-tight">规则引擎配置 (Rule Engine)</h2>
-          <p className="text-sm text-zinc-400 mt-1">设置看盘的先后顺序和条件覆盖逻辑。</p>
+          <p className="text-sm text-zinc-400 mt-1">设置看盘的先后顺序和条件覆盖逻辑。您可以直接修改下方内容并保存。</p>
         </div>
         <button 
           onClick={handleSave}
-          className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+          className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-lg shadow-emerald-900/20"
         >
           {savedStatus ? <CheckCircle2 size={16} /> : <Save size={16} />}
           {savedStatus ? '已保存' : '保存规则'}
@@ -169,16 +222,19 @@ export default function RuleEditor() {
               onChange={handleSchoolChange}
               className="w-full bg-zinc-950 border border-zinc-800 text-zinc-300 text-sm rounded-md px-3 py-2 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 appearance-none"
             >
-              {Object.entries(SCHOOLS).map(([key, data]) => (
+              {Object.entries(localSchools).map(([key, data]) => (
                 <option key={key} value={key}>{data.name}</option>
               ))}
             </select>
             
             <div className="mt-6 p-4 bg-zinc-950/50 rounded-md border border-zinc-800/50">
               <h4 className="text-xs font-medium text-zinc-400 mb-2">流派简介</h4>
-              <p className="text-sm text-zinc-300 leading-relaxed">
-                {currentSchoolData.description}
-              </p>
+              <textarea
+                value={currentSchoolData.description}
+                onChange={(e) => handleSchoolDescriptionChange(e.target.value)}
+                className="w-full bg-transparent border border-transparent hover:border-zinc-700 focus:border-emerald-500 rounded px-2 py-1 -ml-2 text-sm text-zinc-300 leading-relaxed resize-y min-h-[80px] focus:outline-none transition-colors"
+                placeholder="输入流派简介..."
+              />
             </div>
           </div>
         </div>
@@ -203,29 +259,59 @@ export default function RuleEditor() {
                     
                     {/* Step Card */}
                     <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden transition-all hover:border-zinc-700">
-                      <button 
-                        onClick={() => toggleStep(step.id)}
-                        className="w-full px-5 py-4 flex items-center justify-between bg-zinc-900 hover:bg-zinc-800/50 transition-colors text-left"
+                      <div 
+                        className="w-full px-5 py-3 flex items-center justify-between bg-zinc-900 hover:bg-zinc-800/50 transition-colors text-left group"
                       >
-                        <span className="text-sm font-medium text-emerald-400">{step.title}</span>
-                        {isExpanded ? (
-                          <ChevronUp size={16} className="text-zinc-500" />
-                        ) : (
-                          <ChevronDown size={16} className="text-zinc-500" />
-                        )}
-                      </button>
+                        <input 
+                          type="text"
+                          value={step.title}
+                          onChange={(e) => handleStepChange(step.id, 'title', e.target.value)}
+                          className="bg-transparent border border-transparent hover:border-zinc-700 focus:border-emerald-500 rounded px-2 py-1 -ml-2 text-sm font-medium text-emerald-400 w-[85%] focus:outline-none transition-colors"
+                          placeholder="步骤标题"
+                        />
+                        <div className="flex items-center gap-2">
+                          <button 
+                            onClick={() => handleRemoveStep(step.id)}
+                            className="text-zinc-500 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-zinc-800"
+                            title="删除步骤"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                          <button 
+                            onClick={() => toggleStep(step.id)}
+                            className="p-1 text-zinc-500 hover:text-zinc-300 rounded hover:bg-zinc-800"
+                          >
+                            {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                          </button>
+                        </div>
+                      </div>
                       
                       {isExpanded && (
-                        <div className="px-5 pb-5 pt-1 border-t border-zinc-800/50 bg-zinc-950/50">
-                          <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">
-                            {step.description}
-                          </p>
+                        <div className="px-5 pb-5 pt-2 border-t border-zinc-800/50 bg-zinc-950/50">
+                          <textarea
+                            value={step.description}
+                            onChange={(e) => handleStepChange(step.id, 'description', e.target.value)}
+                            className="w-full bg-transparent border border-transparent hover:border-zinc-700 focus:border-emerald-500 rounded px-2 py-1 -ml-2 text-sm text-zinc-300 leading-relaxed resize-y min-h-[100px] focus:outline-none transition-colors"
+                            placeholder="步骤详细规则描述..."
+                          />
                         </div>
                       )}
                     </div>
                   </div>
                 );
               })}
+              
+              {/* Add Step Button */}
+              <div className="relative pl-8 pt-2">
+                <div className="absolute -left-[9px] top-5 w-4 h-4 rounded-full bg-zinc-900 border-2 border-zinc-700 flex items-center justify-center"></div>
+                <button
+                  onClick={handleAddStep}
+                  className="flex items-center gap-2 text-sm text-emerald-500 hover:text-emerald-400 transition-colors px-4 py-2 rounded-md border border-emerald-500/30 hover:border-emerald-500/50 bg-emerald-500/10 hover:bg-emerald-500/20"
+                >
+                  <Plus size={16} />
+                  添加新步骤
+                </button>
+              </div>
             </div>
           </div>
         </div>
