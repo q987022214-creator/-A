@@ -1,7 +1,7 @@
 // src/components/ChatRoom.tsx
 import * as React from 'react';
 import { Component, useState, useRef, useEffect, Suspense } from 'react';
-import { Send, Play, Loader2, Check, X, Bot, User, Trash2, Save, FolderOpen, LayoutDashboard, Compass, Target, Zap, Settings } from 'lucide-react';
+import { Send, Play, Loader2, Check, X, Bot, User, Trash2, Save, FolderOpen, LayoutDashboard, Compass, Target, Zap, Settings, Hexagon } from 'lucide-react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { parseWenMoTianJiToJSON } from '../utils/ziweiParser';
 import { generateNativeChart } from '../utils/nativeChartGenerator';
@@ -92,8 +92,7 @@ export default function ChatRoom() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [activeChartText, setActiveChartText] = useLocalStorage<string | null>('ziwei_active_chart', null);
   
-  const [leftPanelView, setLeftPanelView] = useState<'astrolabe' | 'score'>('astrolabe');
-  const [analysisView, setAnalysisView] = useState<'trend' | 'vcore'>('trend');
+  const [leftPanelView, setLeftPanelView] = useState<'astrolabe' | 'score' | 'vcore'>('astrolabe');
   const [mobileView, setMobileView] = useState<'chart' | 'chat'>('chart');
   const isMobile = window.innerWidth < 1024;
   
@@ -640,12 +639,15 @@ export default function ChatRoom() {
       )}
       <div className={`w-full lg:w-[60%] xl:w-[65%] h-[40vh] sm:h-[50vh] lg:h-full flex-shrink-0 bg-zinc-900 rounded-lg shadow-inner overflow-hidden flex flex-col border border-zinc-800 relative ${isMobile && mobileView !== 'chart' ? 'hidden' : ''}`}>
         <div className="bg-zinc-950 border-b border-zinc-800 p-1 flex justify-center">
-          <div className="flex bg-zinc-900 rounded-lg p-0.5 w-full max-w-[280px] border border-zinc-800/50">
+          <div className="flex bg-zinc-900 rounded-lg p-0.5 w-full max-w-[380px] border border-zinc-800/50">
             <button onClick={() => setLeftPanelView('astrolabe')} className={`flex-1 flex items-center justify-center gap-1.5 py-1 text-[10px] font-medium rounded-md transition-all duration-200 ${leftPanelView === 'astrolabe' ? 'bg-zinc-800 text-emerald-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}>
               <Compass size={12} /> 命盘视图
             </button>
             <button onClick={() => setLeftPanelView('score')} className={`flex-1 flex items-center justify-center gap-1.5 py-1 text-[10px] font-medium rounded-md transition-all duration-200 ${leftPanelView === 'score' ? 'bg-zinc-800 text-emerald-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}>
               <LayoutDashboard size={12} /> 量化分析
+            </button>
+            <button onClick={() => setLeftPanelView('vcore')} className={`flex-1 flex items-center justify-center gap-1.5 py-1 text-[10px] font-medium rounded-md transition-all duration-200 ${leftPanelView === 'vcore' ? 'bg-zinc-800 text-emerald-400 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}>
+              <Hexagon size={12} /> 多维引擎
             </button>
           </div>
         </div>
@@ -682,32 +684,17 @@ export default function ChatRoom() {
               </div>
               {renderTimeMachine()}
             </>
+          ) : leftPanelView === 'score' ? (
+            <div className="w-full h-full flex flex-col overflow-y-auto p-4">
+              <TrendHistogram iztroData={activeChartText} />
+              <PalaceScoreTable iztroData={activeChartText} />
+            </div>
           ) : (
             <div className="w-full h-full flex flex-col overflow-y-auto p-4">
-              <div className="flex justify-center mb-4 shrink-0">
-                <div className="flex bg-zinc-800 p-1 rounded-lg border border-zinc-700 shadow-inner">
-                  <button 
-                    onClick={() => setAnalysisView('trend')}
-                    className={`px-4 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ${analysisView === 'trend' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/40' : 'text-zinc-400 hover:text-zinc-200'}`}
-                  >
-                    趋势直方图
-                  </button>
-                  <button 
-                    onClick={() => setAnalysisView('vcore')}
-                    className={`px-4 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ${analysisView === 'vcore' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/40' : 'text-zinc-400 hover:text-zinc-200'}`}
-                  >
-                    V-Core 仪表盘
-                  </button>
-                </div>
-              </div>
-
-              {analysisView === 'trend' ? (
-                <TrendHistogram iztroData={activeChartText} />
-              ) : (
-                <VCoreDashboard iztroData={activeChartText} />
-              )}
-              
-              <PalaceScoreTable iztroData={activeChartText} />
+              <VCoreDashboard 
+                iztroData={activeChartText} 
+                onAskAI={handleSendMessage} 
+              />
             </div>
           )}
         </div>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Database, GitMerge, Sliders, PlaySquare, Hexagon, MessageSquare, Settings, Brain, Menu, X, FolderOpen } from 'lucide-react';
+import { Database, GitMerge, Sliders, PlaySquare, Hexagon, MessageSquare, Settings, Brain, Menu, X, FolderOpen, Activity } from 'lucide-react';
 import ApiSettingsModal from './ApiSettingsModal';
 
 export type TabType = 'chat' | 'memory' | 'fuel' | 'rules' | 'weights' | 'sandbox' | 'cases';

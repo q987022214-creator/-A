@@ -1,5 +1,6 @@
 // src/utils/vCoreEngine.ts
 import { Vector5D, STAR_SYSTEMS, AFFLICTIONS, TRANSFORMS, DYNAMIC_STACK_RULES } from './vCoreData';
+
 export type { Vector5D };
 
 // 宫位物理上下文定义
@@ -58,6 +59,16 @@ export class VectorMath {
 export class VCoreEngine {
   
   // ==========================================
+  // 兼容旧版 UI 的快捷方法
+  // ==========================================
+  static calculatePalaceVector(palace: PalaceContext, oppPalace: PalaceContext): Vector5D {
+    const { vector: baseVec, isEmpty } = this.extractBaseVector(palace, oppPalace);
+    const afflictedVec = this.applyAfflictions(baseVec, palace);
+    const transformedVec = this.applyTransforms(afflictedVec, palace, isEmpty);
+    return VectorMath.clamp(transformedVec);
+  }
+
+  // ==========================================
   // 管线 1：提取单宫物理基底 (处理空宫与自化)
   // ==========================================
   static extractBaseVector(palace: PalaceContext, oppPalace: PalaceContext): { vector: Vector5D, isEmpty: boolean } {
@@ -93,7 +104,7 @@ export class VCoreEngine {
   static applyAfflictions(vector: Vector5D, palace: PalaceContext): Vector5D {
     let result = { ...vector };
     const isTomb = ['辰', '戌', '丑', '未'].includes(palace.branch);
-    // const hasHuoLing = palace.minorStars.includes('火星') || palace.minorStars.includes('铃星');
+    const hasHuoLing = palace.minorStars.includes('火星') || palace.minorStars.includes('铃星');
     const isTanLang = palace.mainStars.includes('贪狼');
 
     palace.minorStars.forEach(star => {
@@ -257,16 +268,5 @@ export class VCoreEngine {
     const tDelta = VectorMath.delta(vDynamic, vNatal);
 
     return { vFinalDynamic: vDynamic, tDelta, timeTags };
-  }
-
-  /**
-   * 🚀 V-Core 核心计算入口：计算单宫位的 5D 向量 (兼容性包装)
-   */
-  static calculatePalaceVector(palace: PalaceContext, oppPalace?: PalaceContext): Vector5D {
-    const defaultOpp: PalaceContext = { branch: '', mainStars: [], minorStars: [], mutagens: [], selfMutagen: null };
-    const { vector, isEmpty } = this.extractBaseVector(palace, oppPalace || defaultOpp);
-    let res = this.applyAfflictions(vector, palace);
-    res = this.applyTransforms(res, palace, isEmpty);
-    return res;
   }
 }

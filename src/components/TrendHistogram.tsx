@@ -206,11 +206,11 @@ export default function TrendHistogram({ iztroData }: Props) {
           {activeDetail.vector5D && (
             <div className="mb-4 grid grid-cols-5 gap-2">
               {(Object.entries(activeDetail.vector5D) as [keyof Vector5D, number][]).map(([key, val]) => {
-                const k = key;
+                const k = key as string;
                 const labelMap: Record<string, string> = { F: '财(F)', P: '权(P)', E: '情(E)', S: '稳(S)', W: '波(W)' };
                 const colorMap: Record<string, string> = { F: 'text-emerald-400', P: 'text-indigo-400', E: 'text-rose-400', S: 'text-amber-400', W: 'text-sky-400' };
                 return (
-                  <div key={key} className="bg-zinc-900/80 border border-zinc-800 rounded p-2 flex flex-col items-center">
+                  <div key={k} className="bg-zinc-900/80 border border-zinc-800 rounded p-2 flex flex-col items-center">
                     <span className={`text-[9px] font-bold ${colorMap[k]}`}>{labelMap[k]}</span>
                     <span className="text-sm font-mono font-bold text-zinc-100">{val.toFixed(2)}</span>
                   </div>
