@@ -13,6 +13,7 @@ interface Step {
 interface SchoolData {
   name: string;
   description: string;
+  systemInstruction?: string;
   steps: Step[];
 }
 
@@ -20,6 +21,7 @@ const DEFAULT_SCHOOLS: Record<SchoolType, SchoolData> = {
   Zhongzhou: {
     name: '中州派 (Zhongzhou)',
     description: '注重星曜赋性与格局，强调三方四正的星系组合与多宫联动。',
+    systemInstruction: '你是一位顶尖的中州派紫微斗数大师。请严格使用【三盘叠影法（叠宫法）】。我已在【BaseChart】中将原局、大限、流年的身份死死绑定在十二地支坐标上。请直接根据『宫位身份』提取星曜与神煞，并结合下方的『动态运限环境』进行推断，绝对禁止张冠李戴与编造幻觉！',
     steps: [
       {
         id: 'step-1',
@@ -154,6 +156,13 @@ export default function RuleEditor() {
     }));
   };
 
+  const handleSystemInstructionChange = (value: string) => {
+    setLocalSchools(prev => ({
+      ...prev,
+      [selectedSchool]: { ...prev[selectedSchool], systemInstruction: value }
+    }));
+  };
+
   const handleAddStep = () => {
     const newStepId = `step-${Date.now()}`;
     setLocalSchools(prev => {
@@ -234,6 +243,16 @@ export default function RuleEditor() {
                 onChange={(e) => handleSchoolDescriptionChange(e.target.value)}
                 className="w-full bg-transparent border border-transparent hover:border-zinc-700 focus:border-emerald-500 rounded px-2 py-1 -ml-2 text-sm text-zinc-300 leading-relaxed resize-y min-h-[80px] focus:outline-none transition-colors"
                 placeholder="输入流派简介..."
+              />
+            </div>
+
+            <div className="mt-4 p-4 bg-zinc-950/50 rounded-md border border-zinc-800/50">
+              <h4 className="text-xs font-medium text-zinc-400 mb-2">AI 系统指令 (System Instruction)</h4>
+              <textarea
+                value={currentSchoolData.systemInstruction || ''}
+                onChange={(e) => handleSystemInstructionChange(e.target.value)}
+                className="w-full bg-transparent border border-transparent hover:border-zinc-700 focus:border-emerald-500 rounded px-2 py-1 -ml-2 text-sm text-zinc-300 leading-relaxed resize-y min-h-[120px] focus:outline-none transition-colors"
+                placeholder="输入 AI 系统指令，指导 AI 如何解盘..."
               />
             </div>
           </div>

@@ -1,4 +1,6 @@
 import { PatternResult } from './patternRecognizer';
+import { VCoreEngine, Vector5D, PalaceContext, VectorMath } from './vCoreEngine';
+import { STEM_MUTAGENS } from './scoreCalculator';
 
 export interface DynamicPalaceDelta {
   domainName: string;
@@ -11,12 +13,13 @@ export interface DynamicPalaceDelta {
   overlayScore: number;
   overlayLogs: string[];
   totalDelta: number;
+  vector5D?: Vector5D;
 }
 
 export interface LifeTrendMatrix {
   palaceTrends: DynamicPalaceDelta[][];
   overallTrends: DynamicPalaceDelta[];
-  labels: string[]; // 大限或流年标签
+  labels: string[]; 
 }
 
 const DECADE_NAMES = ['命宫', '兄弟宫', '夫妻宫', '子女宫', '财帛宫', '疾厄宫', '迁移宫', '交友宫', '官禄宫', '田宅宫', '福德宫', '父母宫'];
@@ -79,6 +82,29 @@ const getStarObj = (palace: any, starName: string) => {
   return stars.find((s:any) => s.name.includes(starName));
 };
 
+export function mapToPalaceContext(palace: any): PalaceContext {
+  const mainStars = (palace.majorStars || []).map((s: any) => s.name);
+  const minorStars = (palace.minorStars || []).map((s: any) => s.name);
+  const mutagens: string[] = [];
+  [...(palace.majorStars || []), ...(palace.minorStars || [])].forEach((s: any) => {
+    if (s.mutagen) mutagens.push(s.mutagen);
+  });
+
+  // Calculate self-mutagen
+  const stem = palace.heavenlyStem;
+  const stemMutagens = STEM_MUTAGENS[stem] || [];
+  const selfMutagenObj = stemMutagens.find(m => mainStars.includes(m.star));
+  const selfMutagen = selfMutagenObj ? selfMutagenObj.mutagen : null;
+
+  return {
+    branch: palace.earthlyBranch,
+    mainStars,
+    minorStars,
+    mutagens,
+    selfMutagen
+  };
+}
+
 function calculateDomainBonus(domainIdx: number, physicalPalace: any) {
   let score = 0; let logs: string[] = [];
   const add = (s: number, r: string) => { if (s !== 0) { score += s; logs.push(`${r}: ${s>0?'+':''}${s}`); } };
@@ -115,7 +141,6 @@ function calculateDomainBonus(domainIdx: number, physicalPalace: any) {
   return { score, logs };
 }
 
-// 抽取雷达基础辐射方法，供大限和流年复用
 function performOverlayRadar(basePalaces: any[], baseStem: string, baseBranch: string, dynStem: string, dynBranch: string, isYearly: boolean = false) {
   const scores = Array(12).fill(0);
   const logs = Array.from({ length: 12 }).map(() => [] as string[]);
@@ -126,14 +151,16 @@ function performOverlayRadar(basePalaces: any[], baseStem: string, baseBranch: s
   const dLocs = getDynamicStarsLocations(dynStem, dynBranch);
   const dKui = dLocs.kui, dYue = dLocs.yue, dYang = dLocs.yang, dTuo = dLocs.tuo;
   const dChang = dLocs.chang, dQu = dLocs.qu, dLuCun = dLocs.luCun, dMa = dLocs.ma;
+  const dLuan = dLocs.luan, dXi = dLocs.xi; 
+  
+  let oKui=-1, oYue=-1, oYang=-1, oTuo=-1, oChang=-1, oQu=-1, oLuCun=-1, oMa=-1, oLuan=-1, oXi=-1;
+  let oLu=-1, oQuan=-1, oKe=-1, oJi=-1;
+  let oLuArr: number[] = [];
+
   const dLu = getBranchIndex(basePalaces.find(p => hasStar(p, dLocs.sihua[0]))?.earthlyBranch || '');
   const dQuan = getBranchIndex(basePalaces.find(p => hasStar(p, dLocs.sihua[1]))?.earthlyBranch || '');
   const dKe = getBranchIndex(basePalaces.find(p => hasStar(p, dLocs.sihua[2]))?.earthlyBranch || '');
   const dJi = getBranchIndex(basePalaces.find(p => hasStar(p, dLocs.sihua[3]))?.earthlyBranch || '');
-
-  let oKui=-1, oYue=-1, oYang=-1, oTuo=-1, oChang=-1, oQu=-1, oLuCun=-1, oMa=-1, oLuan=-1, oXi=-1;
-  let oLu=-1, oQuan=-1, oKe=-1, oJi=-1;
-  let oLuArr: number[] = [];
 
   if (isYearly) {
     const oLocs = getDynamicStarsLocations(baseStem, baseBranch);
@@ -413,12 +440,21 @@ export function generateLifeTrendMatrix(basePalaces: any[], decades: any[], base
       let oScore = overlays.scores[targetPhysIdx];
       let oLogs = [...overlays.logs[targetPhysIdx]];
       
+      // 🚀 V-Core 5D Vector Calculation
+      const oppPhysIdx = (targetPhysIdx + 6) % 12;
+      const oppPhysicalPalace = basePalaces.find((p:any) => p.earthlyBranch === BRANCHES[oppPhysIdx]);
+
+      const natalContext = mapToPalaceContext(targetPhysicalPalace);
+      const oppContext = mapToPalaceContext(oppPhysicalPalace);
+      const natalVector = VCoreEngine.calculatePalaceVector(natalContext, oppContext);
+
       palaceTrends[domainIdx][idx] = {
         domainName: `大限${DECADE_NAMES[domainIdx]}`, physicalPalace: physName, baseScore: Number(bScore.toFixed(1)),
         domainScore: Number(domainResult.score.toFixed(1)), domainLogs: domainResult.logs,
         activationScore: Number(aScore.toFixed(1)), activationLogs: aLogs,
         overlayScore: Number(oScore.toFixed(1)), overlayLogs: oLogs,
-        totalDelta: Number((bScore + domainResult.score + aScore + oScore).toFixed(1))
+        totalDelta: Number((bScore + domainResult.score + aScore + oScore).toFixed(1)),
+        vector5D: natalVector
       };
       totalBase += bScore; totalDomain += domainResult.score; totalAct += aScore; totalOverlay += oScore;
     }
@@ -496,7 +532,33 @@ export function generateYearlyTrendMatrix(basePalaces: any[], decades: any[], ba
       let oScore = yrOverlays.scores[targetPhysIdx];
       let oLogs = [...yrOverlays.logs[targetPhysIdx]];
 
-      const tDelta = Number((yearlyBaseScore + domainResult.score + aScore + oScore).toFixed(1));
+      // 🚀 V-Core 5D Vector Calculation (Yearly)
+      const natalContext = mapToPalaceContext(targetPhysicalPalace);
+      const oppPhysIdx = (targetPhysIdx + 6) % 12;
+      const oppPhysicalPalace = basePalaces.find((p:any) => p.earthlyBranch === BRANCHES[oppPhysIdx]);
+      const oppNatalContext = mapToPalaceContext(oppPhysicalPalace);
+      
+      const natalVector = VCoreEngine.calculatePalaceVector(natalContext, oppNatalContext);
+      
+      // Yearly context needs yearly mutagens
+      const yLocs = getDynamicStarsLocations(yStem, yBranch);
+      const yearlyMutagens: string[] = [];
+      [...(targetPhysicalPalace.majorStars || []), ...(targetPhysicalPalace.minorStars || [])].forEach((s: any) => {
+        const mutaIdx = yLocs.sihua.indexOf(s.name);
+        if (mutaIdx !== -1) {
+          yearlyMutagens.push(['禄', '权', '科', '忌'][mutaIdx]);
+        }
+      });
+
+      const yearlyContext: PalaceContext = {
+        ...natalContext,
+        mutagens: yearlyMutagens,
+      };
+
+      const yearlyVector = VCoreEngine.calculatePalaceVector(yearlyContext, oppNatalContext);
+      const { tDelta } = VCoreEngine.deduceTimeAxis(natalVector, natalContext, yearlyVector, yearlyContext);
+
+      const tDeltaScore = Number((yearlyBaseScore + domainResult.score + aScore + oScore).toFixed(1));
 
       palaceTrends[domainIdx][i] = {
         domainName: `流年${DECADE_NAMES[domainIdx]}`,
@@ -508,7 +570,8 @@ export function generateYearlyTrendMatrix(basePalaces: any[], decades: any[], ba
         activationLogs: aLogs,
         overlayScore: Number(oScore.toFixed(1)),
         overlayLogs: oLogs,
-        totalDelta: tDelta
+        totalDelta: tDeltaScore,
+        vector5D: tDelta
       };
       totalBase += yearlyBaseScore; totalDomain += domainResult.score; totalAct += aScore; totalOverlay += oScore;
     }

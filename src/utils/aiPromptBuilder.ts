@@ -1,4 +1,6 @@
 // src/utils/aiPromptBuilder.ts
+import { Vector5D } from './vCoreEngine';
+import { VECTOR_SEMANTICS } from './vCoreData';
 
 export interface DynamicContext {
   timeLabel: string; 
@@ -58,7 +60,13 @@ const getDynamicStars = (ganZhi: string) => {
   };
 };
 
-export function buildAIPayload(fullIztroData: any, decadeContext?: DynamicContext, yearContext?: DynamicContext) {
+export function buildAIPayload(
+  fullIztroData: any, 
+  decadeContext?: DynamicContext, 
+  yearContext?: DynamicContext, 
+  customSystemInstruction?: string,
+  vectorData?: { decade?: Vector5D, year?: Vector5D }
+) {
   if (!fullIztroData || !fullIztroData.palaces) return null;
 
   const inverseDecade = decadeContext ? Object.fromEntries(Object.entries(decadeContext.mapping).map(([k, v]) => [v, k])) : {};
@@ -111,7 +119,7 @@ export function buildAIPayload(fullIztroData: any, decadeContext?: DynamicContex
   });
 
   const payload: any = {
-    "system_instruction": "你是一位顶尖的中州派与南派紫微斗数大师。请严格使用【三盘叠影法（叠宫法）】。我已在【BaseChart】中将原局、大限、流年的身份死死绑定在十二地支坐标上。请直接根据『宫位身份』提取星曜与神煞，并结合下方的『动态运限环境』进行推断，绝对禁止张冠李戴与编造幻觉！",
+    "system_instruction": customSystemInstruction || "你是一位顶尖的中州派与南派紫微斗数大师。请严格使用【三盘叠影法（叠宫法）】。我已在【BaseChart】中将原局、大限、流年的身份死死绑定在十二地支坐标上。请直接根据『宫位身份』提取星曜与神煞，并结合下方的『动态运限环境』进行推断，绝对禁止张冠李戴与编造幻觉！",
     "BaseChart_十二地支物理坐标": baseChart
   };
 
@@ -139,5 +147,34 @@ export function buildAIPayload(fullIztroData: any, decadeContext?: DynamicContex
     }
   }
 
+  if (vectorData) {
+    payload["V_Core_5D_Vector_Analysis"] = {};
+    if (vectorData.decade) {
+      payload["V_Core_5D_Vector_Analysis"]["大限命宫向量"] = formatVector(vectorData.decade);
+    }
+    if (vectorData.year) {
+      payload["V_Core_5D_Vector_Analysis"]["流年命宫向量"] = formatVector(vectorData.year);
+    }
+  }
+
   return payload;
+}
+
+function formatVector(v: Vector5D) {
+  const getS = (val: number, key: keyof typeof VECTOR_SEMANTICS) => {
+    const s = VECTOR_SEMANTICS[key as keyof typeof VECTOR_SEMANTICS];
+    if (val >= 1.2) return s.high;
+    if (val <= 0.6) return s.low;
+    return s.mid;
+  };
+  return {
+    "数据": v,
+    "语义": {
+      "财(F)": `${v.F} - ${getS(v.F, 'F')}`,
+      "权(P)": `${v.P} - ${getS(v.P, 'P')}`,
+      "情(E)": `${v.E} - ${getS(v.E, 'E')}`,
+      "稳(S)": `${v.S} - ${getS(v.S, 'S')}`,
+      "波(W)": `${v.W} - ${getS(v.W, 'W')}`
+    }
+  };
 }

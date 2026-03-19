@@ -7,10 +7,13 @@ import { parseWenMoTianJiToJSON } from '../utils/ziweiParser';
 import { generateNativeChart } from '../utils/nativeChartGenerator';
 import { extractAndSaveMemory } from '../utils/memoryExtractor';
 import { buildAIPayload, DynamicContext } from '../utils/aiPromptBuilder';
+import { VCoreEngine, VectorMath, Vector5D } from '../utils/vCoreEngine';
+import { mapToPalaceContext } from '../utils/dynamicScoreCalculator';
 import { astro } from 'iztro'; 
 import { DateTimePickerModal } from './DateTimePickerModal';
 import PalaceScoreTable from './PalaceScoreTable';
 import TrendHistogram from './TrendHistogram';
+import VCoreDashboard from './VCoreDashboard';
 import { ChatBubble } from './ChatBubble';
 
 class ErrorBoundary extends React.Component<{ fallback: React.ReactNode, children: React.ReactNode }, { hasError: boolean }> {
@@ -74,6 +77,12 @@ const getPalaceMapping = (lifeBranch: string, prefix: string) => {
   return mapping;
 };
 
+const getOppositeBranch = (branch: string) => {
+  const branches = ["子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥"];
+  const idx = branches.indexOf(branch);
+  return branches[(idx + 6) % 12];
+};
+
 export default function ChatRoom() {
   const [chartText, setChartText] = useState('');
   const [messages, setMessages] = useLocalStorage<Message[]>('ziwei_chat_messages', [
@@ -84,6 +93,7 @@ export default function ChatRoom() {
   const [activeChartText, setActiveChartText] = useLocalStorage<string | null>('ziwei_active_chart', null);
   
   const [leftPanelView, setLeftPanelView] = useState<'astrolabe' | 'score'>('astrolabe');
+  const [analysisView, setAnalysisView] = useState<'trend' | 'vcore'>('trend');
   const [mobileView, setMobileView] = useState<'chart' | 'chat'>('chart');
   const isMobile = window.innerWidth < 1024;
   
@@ -187,7 +197,7 @@ export default function ChatRoom() {
             let clean = activeChartText.trim();
             if (!clean.startsWith('{')) clean = clean.match(/\{[\s\S]*\}/)?.[0] || '';
             const chartObj = JSON.parse(clean);
-            const aiPayload = buildAIPayload(chartObj);
+            const aiPayload = buildAIPayload(chartObj, undefined, undefined, activeRule?.systemInstruction);
             systemPrompt += `\n\n【全息命盘结构化数据包】：\n${JSON.stringify(aiPayload, null, 2)}`;
           } catch (e) {
             systemPrompt += `\n\n【当前正在分析的全局命盘数据】：\n${activeChartText}`;
@@ -264,7 +274,7 @@ export default function ChatRoom() {
       const pureJsonStr = JSON.stringify(parsedObj, null, 2);
       setActiveChartText(pureJsonStr);
       
-      const aiPayload = buildAIPayload(parsedObj);
+      const aiPayload = buildAIPayload(parsedObj, undefined, undefined, activeRule?.systemInstruction);
       const payloadStr = JSON.stringify(aiPayload, null, 2);
       
       const displayContent = `🔮 成功导入并解析排盘文本。请基于原局为我推算。`;
@@ -348,7 +358,7 @@ export default function ChatRoom() {
     const newCases = [...cases, { id: Date.now().toString(), name, content: pureJsonStr, createdAt: Date.now(), category: '未分类' }];
     setCases(newCases);
 
-    const aiPayload = buildAIPayload(chartData);
+    const aiPayload = buildAIPayload(chartData, undefined, undefined, activeRule?.systemInstruction);
     const payloadStr = JSON.stringify(aiPayload, null, 2);
     const displayContent = `🔮 成功生成命盘：${name}。请基于原局为我推算。`;
     const promptToAI = `我已提交新的排盘数据，请查收并简要总述一下该先天格局。`;
@@ -363,7 +373,7 @@ export default function ChatRoom() {
       let clean = activeChartText.trim();
       if (!clean.startsWith('{')) clean = clean.match(/\{[\s\S]*\}/)?.[0] || '';
       const chartObj = JSON.parse(clean);
-      if (!chartObj?.rawParams) return { payloadStr: JSON.stringify(buildAIPayload(chartObj), null, 2), focusTitle: '原局底盘' };
+      if (!chartObj?.rawParams) return { payloadStr: JSON.stringify(buildAIPayload(chartObj, undefined, undefined, activeRule?.systemInstruction), null, 2), focusTitle: '原局底盘' };
 
       const astrolabe = astro.bySolar(chartObj.rawParams.birthday, chartObj.rawParams.birthTime, chartObj.rawParams.gender, true, 'zh-CN');
       const horoscope = astrolabe.horoscope(targetDate);
@@ -371,6 +381,7 @@ export default function ChatRoom() {
       let decadeData: DynamicContext | undefined = undefined;
       let yearData: DynamicContext | undefined = undefined;
       let focusTitle = `${targetDate.getFullYear()}年 流年`;
+      let vectorData: { decade?: Vector5D, year?: Vector5D } = {};
 
       // 1. 生成大运 12 宫叠宫映射
       if (horoscope.decadal) {
@@ -391,6 +402,15 @@ export default function ChatRoom() {
           ganZhi: `${d.heavenlyStem}${d.earthlyBranch}`,
           mapping
         };
+
+        // 🚀 计算大限命宫 5D 向量
+        const decadeLifePalace = (horoscope as any).palaces.find((p: any) => p.earthlyBranch === d.earthlyBranch);
+        const oppDecadePalace = (horoscope as any).palaces.find((p: any) => p.earthlyBranch === getOppositeBranch(d.earthlyBranch));
+        if (decadeLifePalace) {
+          const dContext = mapToPalaceContext(decadeLifePalace);
+          const oppContext = oppDecadePalace ? mapToPalaceContext(oppDecadePalace) : undefined;
+          vectorData.decade = VCoreEngine.calculatePalaceVector(dContext, oppContext);
+        }
       }
 
       // 2. 生成流年 12 宫叠宫映射
@@ -405,10 +425,32 @@ export default function ChatRoom() {
             mapping
           };
           focusTitle = `${targetDate.getFullYear()}年 流年`;
+
+          // 🚀 计算流年命宫 5D 向量 (含时空轴演化)
+          const yearLifePalace = (horoscope as any).palaces.find((p: any) => p.earthlyBranch === y.earthlyBranch);
+          const oppYearPalace = (horoscope as any).palaces.find((p: any) => p.earthlyBranch === getOppositeBranch(y.earthlyBranch));
+          
+          const natalLifePalace = astrolabe.palaces.find(p => p.earthlyBranch === y.earthlyBranch);
+          const oppNatalPalace = astrolabe.palaces.find(p => p.earthlyBranch === getOppositeBranch(y.earthlyBranch));
+
+          if (yearLifePalace && natalLifePalace) {
+            const yContext = mapToPalaceContext(yearLifePalace);
+            const oppYContext = oppYearPalace ? mapToPalaceContext(oppYearPalace) : undefined;
+            
+            const nContext = mapToPalaceContext(natalLifePalace);
+            const oppNContext = oppNatalPalace ? mapToPalaceContext(oppNatalPalace) : undefined;
+
+            const natalVector = VCoreEngine.calculatePalaceVector(nContext, oppNContext);
+            const yearlyVector = VCoreEngine.calculatePalaceVector(yContext, oppYContext);
+            
+            // 使用 deduceTimeAxis 计算 T_Delta 演化向量
+            const res = VCoreEngine.deduceTimeAxis(natalVector, nContext, yearlyVector, yContext);
+            vectorData.year = res.tDelta;
+          }
         }
       }
 
-      const aiPayload = buildAIPayload(astrolabe, decadeData, yearData);
+      const aiPayload = buildAIPayload(astrolabe, decadeData, yearData, activeRule?.systemInstruction, vectorData);
       return { payloadStr: JSON.stringify(aiPayload, null, 2), focusTitle };
     } catch (e) {
       console.error("提取时空结构失败:", e);
@@ -480,7 +522,7 @@ export default function ChatRoom() {
       const c = cases.find(c => c.id === selectedCaseIds[0]);
       if (c) {
         setActiveChartText(c.content); 
-        const aiPayload = buildAIPayload(JSON.parse(c.content)); 
+        const aiPayload = buildAIPayload(JSON.parse(c.content), undefined, undefined, activeRule?.systemInstruction); 
         const payloadStr = JSON.stringify(aiPayload, null, 2);
         const displayContent = `🔮 载入命盘：${c.name}`;
         const promptToAI = `我已切换至命盘：${c.name}，请查收。`;
@@ -642,8 +684,28 @@ export default function ChatRoom() {
             </>
           ) : (
             <div className="w-full h-full flex flex-col overflow-y-auto p-4">
-              {/* 🔌 这里就是插入直方图的地方！ */}
-              <TrendHistogram iztroData={activeChartText} />
+              <div className="flex justify-center mb-4 shrink-0">
+                <div className="flex bg-zinc-800 p-1 rounded-lg border border-zinc-700 shadow-inner">
+                  <button 
+                    onClick={() => setAnalysisView('trend')}
+                    className={`px-4 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ${analysisView === 'trend' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/40' : 'text-zinc-400 hover:text-zinc-200'}`}
+                  >
+                    趋势直方图
+                  </button>
+                  <button 
+                    onClick={() => setAnalysisView('vcore')}
+                    className={`px-4 py-1.5 text-xs font-medium rounded-md transition-all duration-200 ${analysisView === 'vcore' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/40' : 'text-zinc-400 hover:text-zinc-200'}`}
+                  >
+                    V-Core 仪表盘
+                  </button>
+                </div>
+              </div>
+
+              {analysisView === 'trend' ? (
+                <TrendHistogram iztroData={activeChartText} />
+              ) : (
+                <VCoreDashboard iztroData={activeChartText} />
+              )}
               
               <PalaceScoreTable iztroData={activeChartText} />
             </div>
