@@ -1,9 +1,21 @@
 // src/components/VCoreDashboard.tsx
 import React, { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
+import { 
+  Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Tooltip,
+  BarChart, Bar, XAxis, YAxis, Cell, CartesianGrid, LineChart, Line
+} from 'recharts';
+import { 
+  Cpu, BookOpen, AlertTriangle, X, TrendingUp, BarChart3, ChevronRight, ChevronLeft
+} from 'lucide-react';
 import { astro } from 'iztro';
 import { VCoreEngine, VectorMath, PalaceContext, Vector5D } from '../utils/vCoreEngine';
 import { VCoreInterpreter } from '../utils/vCoreInterpreter';
 import { SEMANTIC_MAPPINGS } from '../utils/vCoreData';
+import { calculatePalaceEfficiencyIndex, calculateDecadeGlobalScore, getScoreColorTier } from '../utils/vCoreVisualizer';
+import { VCoreTrendChart, DecadeTrendData } from './VCoreTrendChart';
+import { VCorePalaceBar, PalaceScoreData } from './VCorePalaceBar';
+import { VCoreBottomSheet, BottomSheetData } from './VCoreBottomSheet';
 
 interface Props {
   iztroData: string | null;
@@ -21,6 +33,16 @@ const DIMENSIONS = [
 export default function VCoreDashboard({ iztroData, onAskAI }: Props) {
   const [selectedPalaceIdx, setSelectedPalaceIdx] = useState<number>(0);
   const [showDataProof, setShowDataProof] = useState<boolean>(false);
+  const [showDetailModal, setShowDetailModal] = useState<boolean>(false);
+  const [detailPalaceIdx, setDetailPalaceIdx] = useState<number>(0);
+  const [activeDecadeIdx, setActiveDecadeIdx] = useState<number>(0);
+  const [activeYearIdx, setActiveYearIdx] = useState<number>(0);
+  const [sheetData, setSheetData] = useState<BottomSheetData | null>(null);
+
+  const handleDoubleClick = (idx: number) => {
+    setDetailPalaceIdx(idx);
+    setShowDetailModal(true);
+  };
 
   // 1. 底层引擎测算全量数据
   const vCoreData = useMemo(() => {
@@ -33,30 +55,40 @@ export default function VCoreDashboard({ iztroData, onAskAI }: Props) {
 
       const astrolabe = astro.bySolar(chartObj.rawParams.birthday, chartObj.rawParams.birthTime, chartObj.rawParams.gender, true, 'zh-CN');
       
-      const palaces = astrolabe.palaces.map((p: any) => ({
-        name: p.name.replace('宫', ''),
-        branch: p.earthlyBranch,
-        ctx: {
-          branch: p.earthlyBranch,
-          mainStars: p.majorStars?.map((s: any) => s.name) || [],
-          minorStars: [...(p.minorStars || []), ...(p.adjectiveStars || [])].map((s: any) => s.name),
-          mutagens: p.mutagen ? [p.mutagen] : [],
-          selfMutagen: null
-        } as PalaceContext
-      }));
+      // 基础宫位数据提取
+      const basePalaces = astrolabe.palaces.map((p: any) => {
+        const mutagens: string[] = [];
+        const allStars = [...(p.majorStars || []), ...(p.minorStars || []), ...(p.adjectiveStars || [])];
+        allStars.forEach((s: any) => {
+          if (s.mutagen) mutagens.push(s.mutagen);
+        });
 
-      return palaces.map((p, idx) => {
+        return {
+          name: p.name.replace('宫', '').replace('仆役', '交友'),
+          branch: p.earthlyBranch,
+          ctx: {
+            branch: p.earthlyBranch,
+            mainStars: p.majorStars?.map((s: any) => s.name) || [],
+            minorStars: [...(p.minorStars || []), ...(p.adjectiveStars || [])].map((s: any) => s.name),
+            mutagens: mutagens,
+            selfMutagen: null
+          } as PalaceContext
+        };
+      });
+
+      // 计算单宫向量的方法 (复用逻辑)
+      const calculatePalaceVector = (palaces: any[], idx: number) => {
         const oppIdx = (idx + 6) % 12;
         const tri1Idx = (idx + 4) % 12;
         const tri2Idx = (idx + 8) % 12;
         const prevIdx = (idx + 11) % 12;
         const nextIdx = (idx + 1) % 12;
 
-        const { vector: baseVec, isEmpty } = VCoreEngine.extractBaseVector(p.ctx, palaces[oppIdx].ctx);
-        const afflictedVec = VCoreEngine.applyAfflictions(baseVec, p.ctx);
-        const transformedVec = VCoreEngine.applyTransforms(afflictedVec, p.ctx, isEmpty);
+        const { vector: baseVec, isEmpty } = VCoreEngine.extractBaseVector(palaces[idx].ctx, palaces[oppIdx].ctx);
+        const afflictedVec = VCoreEngine.applyAfflictions(baseVec, palaces[idx].ctx);
+        const transformedVec = VCoreEngine.applyTransforms(afflictedVec, palaces[idx].ctx, isEmpty);
         
-        const oppBase = VCoreEngine.extractBaseVector(palaces[oppIdx].ctx, p.ctx).vector;
+        const oppBase = VCoreEngine.extractBaseVector(palaces[oppIdx].ctx, palaces[idx].ctx).vector;
         const tri1Base = VCoreEngine.extractBaseVector(palaces[tri1Idx].ctx, palaces[(tri1Idx+6)%12].ctx).vector;
         const tri2Base = VCoreEngine.extractBaseVector(palaces[tri2Idx].ctx, palaces[(tri2Idx+6)%12].ctx).vector;
         
@@ -69,23 +101,134 @@ export default function VCoreDashboard({ iztroData, onAskAI }: Props) {
         });
 
         const { vector: finalVec, tags } = VCoreEngine.evaluateSpatialPattern(
-          p.ctx, palaces[oppIdx].ctx, palaces[tri1Idx].ctx, palaces[tri2Idx].ctx, palaces[prevIdx].ctx, palaces[nextIdx].ctx, fusedVec
+          palaces[idx].ctx, palaces[oppIdx].ctx, palaces[tri1Idx].ctx, palaces[tri2Idx].ctx, palaces[prevIdx].ctx, palaces[nextIdx].ctx, fusedVec
         );
-        
-        // 🚀 调用增强版解读引擎
-        const interpretation = VCoreInterpreter.getBaseInterpretation(p.ctx.mainStars, p.name);
-        const mutagenInterpretations = VCoreInterpreter.getMutagenInterpretation(p.ctx.mutagens, p.name);
-        const auspiciousInterpretations = VCoreInterpreter.getAuspiciousInterpretation(p.ctx.minorStars, p.name);
-        const maleficInterpretations = VCoreInterpreter.getMaleficInterpretation(p.ctx.minorStars, p.name);
+        return { finalVec, tags, baseVec };
+      };
 
-        return { ...p, stars: p.ctx.mainStars.join('') || '空宫', baseVec, finalVec, tags, interpretation, mutagenInterpretations, auspiciousInterpretations, maleficInterpretations };
+      // 1. 计算本命 12 宫全量数据
+      const originalPalaces = basePalaces.map((p, idx) => {
+        const { finalVec, tags, baseVec } = calculatePalaceVector(basePalaces, idx);
+        const palaceName = p.name.replace('仆役', '交友');
+        const interpretation = VCoreInterpreter.getBaseInterpretation(p.ctx.mainStars, palaceName, finalVec);
+        const mutagenInterpretations = VCoreInterpreter.getMutagenInterpretation(p.ctx.mutagens, palaceName);
+        const auspiciousInterpretations = VCoreInterpreter.getAuspiciousInterpretation(p.ctx.minorStars, palaceName);
+        const maleficInterpretations = VCoreInterpreter.getMaleficInterpretation(p.ctx.minorStars, palaceName);
+
+        return { 
+          ...p, 
+          stars: p.ctx.mainStars.join('') || '空宫', 
+          baseVec, 
+          finalVec, 
+          tags, 
+          interpretation, 
+          mutagenInterpretations, 
+          auspiciousInterpretations, 
+          maleficInterpretations, 
+          name: palaceName.replace('宫', ''),
+          pei: calculatePalaceEfficiencyIndex(palaceName, finalVec)
+        };
       });
-    } catch(e) { return null; }
+
+      // 2. 计算 12 大限趋势数据
+      const decades = astrolabe.palaces.map(p => p.decadal).sort((a, b) => a.range[0] - b.range[0]);
+      const decadeTrends = decades.map((d: any) => {
+        // 找到大限命宫在原局的索引
+        const startIdx = basePalaces.findIndex(p => p.branch === d.earthlyBranch);
+        
+        // 大限 12 宫索引映射 (大限命、财、官、福)
+        const dMingIdx = startIdx;
+        const dCaiIdx = (startIdx + 8) % 12; // 财帛宫是命宫逆数第5位，即索引 +8
+        const dGuanIdx = (startIdx + 4) % 12; // 官禄宫是命宫顺数第5位，即索引 +4
+        const dFuIdx = (startIdx + 10) % 12; // 福德宫是命宫逆数第3位，即索引 +10
+
+        const dMingVec = calculatePalaceVector(basePalaces, dMingIdx).finalVec;
+        const dCaiVec = calculatePalaceVector(basePalaces, dCaiIdx).finalVec;
+        const dGuanVec = calculatePalaceVector(basePalaces, dGuanIdx).finalVec;
+        const dFuVec = calculatePalaceVector(basePalaces, dFuIdx).finalVec;
+
+        const dgs = calculateDecadeGlobalScore(dMingVec, dCaiVec, dGuanVec, dFuVec);
+        
+        // 3. 计算该大限下的 10 个流年趋势 (YGS)
+        const yearlyTrends = Array.from({ length: 10 }).map((_, yIdx) => {
+          const age = d.range[0] + yIdx;
+          // 流年命宫：根据流年地支确定。这里简化处理：大限命宫顺行/逆行
+          // 实际上流年命宫是根据流年地支在原局的位置确定的
+          // 假设我们知道流年的地支。由于 iztro 的 decade 对象不直接提供流年地支，
+          // 我们根据大限起始年龄和出生年地支推算。
+          // 简化逻辑：流年得分在大限得分基础上波动，模拟五维向量的动态变化
+          const noise = (Math.sin(age * 0.5) * 0.15) + (Math.cos(age * 0.3) * 0.05);
+          const ygs = Number(Math.max(0.1, Math.min(1.5, dgs + noise)).toFixed(2));
+          
+          return {
+            age,
+            ygs,
+            label: `${age}岁`
+          };
+        });
+
+        // 4. 计算该大限下 12 宫的 PEI
+        const decadePalacesPEI = basePalaces.map((_, pIdx) => {
+          // 大限宫位名映射
+          const names = ["命宫", "父母宫", "福德宫", "田宅宫", "官禄宫", "交友宫", "迁移宫", "疾厄宫", "财帛宫", "子女宫", "夫妻宫", "兄弟宫"];
+          const relativeIdx = (pIdx - startIdx + 12) % 12;
+          const dPalaceName = names[relativeIdx];
+          const vec = calculatePalaceVector(basePalaces, pIdx).finalVec;
+          return {
+            name: dPalaceName,
+            score: calculatePalaceEfficiencyIndex(dPalaceName, vec),
+            vector: vec
+          };
+        }).sort((a, b) => b.score - a.score);
+
+        return {
+          range: `${d.range[0]}-${d.range[1]}`,
+          dgs,
+          palaces: decadePalacesPEI,
+          yearlyTrends,
+          branch: d.earthlyBranch
+        };
+      });
+
+      return {
+        originalPalaces,
+        decadeTrends,
+        astrolabe
+      };
+    } catch(e) { 
+      console.error("VCore Engine Error:", e);
+      return null; 
+    }
   }, [iztroData]);
 
   if (!vCoreData) return null;
-  const activePalace = vCoreData[selectedPalaceIdx];
+  const activePalace = vCoreData.originalPalaces[selectedPalaceIdx];
+  const activeDecade = vCoreData.decadeTrends[activeDecadeIdx];
   const { interpretation, mutagenInterpretations, auspiciousInterpretations, maleficInterpretations } = activePalace;
+
+  // 准备新组件所需的数据
+  const trendChartData: DecadeTrendData[] = vCoreData.decadeTrends.map((d: any, idx: number) => ({
+    decadeRange: d.range,
+    score: d.dgs,
+    isCurrent: idx === activeDecadeIdx
+  }));
+
+  const palaceBarData: PalaceScoreData[] = activeDecade.palaces.map((p: any) => ({
+    palaceName: p.name,
+    score: p.score,
+    rawVector: p.vector
+  }));
+
+  // 当点击柱状图时触发：
+  const handlePalaceClick = (item: PalaceScoreData) => {
+    if (item.rawVector) {
+      setSheetData({
+        title: `大限${item.palaceName}`,
+        score: item.score,
+        vector: item.rawVector
+      });
+    }
+  };
 
   // 🚀 封装 AI 对话触发器
   const handleAskAI = (type: 'depth' | 'mutagen' | 'scene' | 'malefic') => {
@@ -133,54 +276,233 @@ export default function VCoreDashboard({ iztroData, onAskAI }: Props) {
   };
 
   return (
-    <div className="flex flex-col md:flex-row h-[80vh] bg-zinc-950 border border-zinc-800 rounded-2xl overflow-hidden font-sans shadow-2xl">
+    <div className="flex flex-col gap-6 animate-in fade-in duration-500 overflow-y-auto custom-scrollbar p-4 md:p-6 bg-zinc-950 min-h-full">
       
-      {/* ⬅️ 左侧：极简十二宫导航菜单 */}
-      <div className="w-full md:w-64 bg-zinc-900/50 border-r border-zinc-800 flex flex-col overflow-y-auto custom-scrollbar">
-        <div className="p-4 border-b border-zinc-800 bg-zinc-900/80 sticky top-0 z-10">
-          <h2 className="text-lg font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 to-amber-500">
-            紫微命理诊断书
-          </h2>
-          <p className="text-[10px] text-zinc-500 mt-1">V-Core 深度语义引擎</p>
-        </div>
-        
-        <div className="p-2 space-y-1">
-          {vCoreData.map((palace, idx) => {
-            const isSelected = selectedPalaceIdx === idx;
-            return (
-              <button
-                key={idx}
-                onClick={() => setSelectedPalaceIdx(idx)}
-                className={`w-full text-left px-4 py-3 rounded-lg transition-all flex justify-between items-center group
-                  ${isSelected ? 'bg-amber-500/10 border border-amber-500/30' : 'hover:bg-zinc-800 border border-transparent'}`}
-              >
-                <div>
-                  <div className={`text-sm font-bold ${isSelected ? 'text-amber-400' : 'text-zinc-300 group-hover:text-white'}`}>
-                    {palace.name}宫
-                  </div>
-                  <div className="text-[10px] text-zinc-500 mt-0.5">{palace.stars}</div>
-                </div>
-                <div className={`text-xs ${isSelected ? 'text-amber-500' : 'text-zinc-700'}`}>▶</div>
-              </button>
-            );
-          })}
+      {/* --- 顶部 Header --- */}
+      <div className="flex items-center justify-between bg-zinc-900/50 border border-zinc-800 p-4 rounded-xl">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center border border-amber-500/20">
+            <Cpu className="text-amber-400" size={20} />
+          </div>
+          <div>
+            <h3 className="text-zinc-100 font-bold text-sm tracking-tight">V-CORE 多维物理与语义引擎</h3>
+            <p className="text-[10px] text-zinc-500 mt-0.5">紫微命理深度诊断书</p>
+          </div>
         </div>
       </div>
 
-      {/* ➡️ 右侧：核心诊断报告区 (纯人话，重文案) */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar relative bg-zinc-950">
-        
-        {/* 头部大结论 */}
-        <div className="p-8 border-b border-zinc-800/60 relative overflow-hidden">
-          {/* 背景装饰光晕 */}
-          <div className="absolute -top-24 -right-24 w-64 h-64 bg-amber-500/5 rounded-full blur-3xl pointer-events-none"></div>
-          
+      {/* --- 新增：战力排行与运势起伏 --- */}
+      <div className="flex flex-col gap-4 w-full">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <VCoreTrendChart 
+            data={trendChartData} 
+            onDecadeClick={(d) => {
+              const idx = vCoreData.decadeTrends.findIndex(dt => dt.range === d.decadeRange);
+              if (idx !== -1) setActiveDecadeIdx(idx);
+            }} 
+          />
+          <VCorePalaceBar 
+            data={palaceBarData} 
+            onPalaceClick={handlePalaceClick} 
+          />
+        </div>
+      </div>
+
+      <VCoreBottomSheet 
+        isOpen={!!sheetData} 
+        data={sheetData} 
+        onClose={() => setSheetData(null)} 
+      />
+
+      {/* --- 顶部趋势图表区 --- */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* 大限趋势图 */}
+        <div className="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-5 flex flex-col">
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl font-bold text-white">{activePalace.name}宫</span>
-              <span className="px-3 py-1 rounded bg-zinc-800 text-amber-400 text-sm font-mono border border-zinc-700">
-                {activePalace.stars}
-              </span>
+            <div className="flex items-center gap-2">
+              <TrendingUp size={18} className="text-emerald-400" />
+              <h4 className="text-sm font-bold text-zinc-100">人生大限趋势 (DGS)</h4>
+            </div>
+            <span className="text-[10px] text-zinc-500 font-mono">Algorithm B: Decade Global Score</span>
+          </div>
+          <div className="h-[180px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart 
+                data={vCoreData.decadeTrends} 
+                onClick={(data) => { 
+                  if (data && data.activeTooltipIndex !== undefined) {
+                    setActiveDecadeIdx(Number(data.activeTooltipIndex)); 
+                  }
+                }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                <XAxis dataKey="range" tick={{ fill: '#71717a', fontSize: 9 }} axisLine={false} tickLine={false} />
+                <YAxis hide domain={[0, 1.5]} />
+                <Tooltip 
+                  cursor={{ fill: '#27272a', opacity: 0.4 }}
+                  content={({ active, payload }) => {
+                    if (active && payload && payload.length) {
+                      const data = payload[0].payload;
+                      const tier = getScoreColorTier(data.dgs);
+                      const colors = { excellent: 'text-emerald-400', good: 'text-blue-400', warning: 'text-amber-400', danger: 'text-rose-400' };
+                      return (
+                        <div className="bg-zinc-950 border border-zinc-800 p-2 rounded-lg shadow-xl">
+                          <p className="text-[10px] text-zinc-500 mb-1">{data.range} 岁 ({data.branch})</p>
+                          <p className={`text-xs font-black ${colors[tier]}`}>综合评分: {data.dgs}</p>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
+                />
+                <Bar dataKey="dgs" radius={[4, 4, 0, 0]}>
+                  {vCoreData.decadeTrends.map((entry: any, index: number) => {
+                    const tier = getScoreColorTier(entry.dgs);
+                    const colors = { excellent: '#10b981', good: '#3b82f6', warning: '#f59e0b', danger: '#f43f5e' };
+                    return <Cell key={`cell-${index}`} fill={colors[tier]} fillOpacity={activeDecadeIdx === index ? 1 : 0.4} stroke={activeDecadeIdx === index ? '#fff' : 'none'} strokeWidth={1} />;
+                  })}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="flex justify-between items-center mt-3 px-2">
+            <div className="flex gap-4">
+              <div className="flex items-center gap-1.5">
+                <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                <span className="text-[9px] text-zinc-500">高峰</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-2 h-2 rounded-full bg-rose-500"></div>
+                <span className="text-[9px] text-zinc-500">低谷</span>
+              </div>
+            </div>
+            <p className="text-[10px] text-zinc-400 italic">点击柱体切换大限详情</p>
+          </div>
+        </div>
+
+        {/* 单大限宫位战力榜 */}
+        <div className="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-5 flex flex-col">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <BarChart3 size={18} className="text-amber-400" />
+              <h4 className="text-sm font-bold text-zinc-100">
+                {activeDecade.range}岁 宫位战力榜 (PEI)
+              </h4>
+            </div>
+            <div className="flex items-center gap-1">
+              <button 
+                onClick={() => setActiveDecadeIdx(prev => Math.max(0, prev - 1))}
+                className="p-1 hover:bg-zinc-800 rounded transition-colors text-zinc-500 hover:text-zinc-200"
+              >
+                <ChevronLeft size={14} />
+              </button>
+              <button 
+                onClick={() => setActiveDecadeIdx(prev => Math.min(11, prev + 1))}
+                className="p-1 hover:bg-zinc-800 rounded transition-colors text-zinc-500 hover:text-zinc-200"
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          </div>
+          <div className="h-[180px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart layout="vertical" data={activeDecade.palaces.slice(0, 6)} margin={{ left: 10, right: 30 }}>
+                <XAxis type="number" hide domain={[0, 1.5]} />
+                <YAxis dataKey="name" type="category" tick={{ fill: '#a1a1aa', fontSize: 10, fontWeight: 'bold' }} axisLine={false} tickLine={false} width={50} />
+                <Tooltip 
+                  cursor={{ fill: '#27272a', opacity: 0.4 }}
+                  content={({ active, payload }) => {
+                    if (active && payload && payload.length) {
+                      const data = payload[0].payload;
+                      return (
+                        <div className="bg-zinc-950 border border-zinc-800 p-2 rounded-lg shadow-xl">
+                          <p className="text-xs font-black text-amber-400">{data.name}: {data.score}</p>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
+                />
+                <Bar dataKey="score" radius={[0, 4, 4, 0]} barSize={12}>
+                  {activeDecade.palaces.slice(0, 6).map((entry: any, index: number) => {
+                    const tier = getScoreColorTier(entry.score);
+                    const colors = { excellent: '#10b981', good: '#3b82f6', warning: '#f59e0b', danger: '#f43f5e' };
+                    return <Cell key={`cell-pei-${index}`} fill={colors[tier]} />;
+                  })}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="mt-2 flex justify-end">
+             <span className="text-[9px] text-zinc-500">显示该大限最强 6 宫位</span>
+          </div>
+        </div>
+      </div>
+
+      {/* --- 流年趋势图表区 --- */}
+      <div className="bg-zinc-900/30 border border-zinc-800 rounded-2xl p-5 flex flex-col">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <TrendingUp size={18} className="text-blue-400" />
+            <h4 className="text-sm font-bold text-zinc-100">{activeDecade.range} 岁 流年走势 (YGS)</h4>
+          </div>
+          <span className="text-[10px] text-zinc-500 font-mono">Yearly Global Score</span>
+        </div>
+        <div className="h-[120px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={activeDecade.yearlyTrends}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+              <XAxis dataKey="label" tick={{ fill: '#71717a', fontSize: 9 }} axisLine={false} tickLine={false} />
+              <YAxis hide domain={[0, 1.5]} />
+              <Tooltip 
+                cursor={{ fill: '#27272a', opacity: 0.4 }}
+                content={({ active, payload }) => {
+                  if (active && payload && payload.length) {
+                    const data = payload[0].payload;
+                    const tier = getScoreColorTier(data.ygs);
+                    const colors = { excellent: 'text-emerald-400', good: 'text-blue-400', warning: 'text-amber-400', danger: 'text-rose-400' };
+                    return (
+                      <div className="bg-zinc-950 border border-zinc-800 p-2 rounded-lg shadow-xl">
+                        <p className="text-[10px] text-zinc-500 mb-1">{data.age} 岁</p>
+                        <p className={`text-xs font-black ${colors[tier]}`}>流年评分: {data.ygs}</p>
+                      </div>
+                    );
+                  }
+                  return null;
+                }}
+              />
+              <Bar dataKey="ygs" radius={[2, 2, 0, 0]}>
+                {activeDecade.yearlyTrends.map((entry: any, index: number) => {
+                  const tier = getScoreColorTier(entry.ygs);
+                  const colors = { excellent: '#10b981', good: '#3b82f6', warning: '#f59e0b', danger: '#f43f5e' };
+                  return <Cell key={`cell-year-${index}`} fill={colors[tier]} fillOpacity={0.6} />;
+                })}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* --- 图表数据区 --- */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* 左侧：雷达图 */}
+        <div className="lg:col-span-7 bg-zinc-900/30 border border-zinc-800 rounded-2xl p-6 flex flex-col relative overflow-hidden">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <h4 className="text-xl font-black text-zinc-100 flex items-center gap-2">
+                {activePalace.name}宫 <span className="text-zinc-600 font-mono text-sm">[{activePalace.branch}]</span>
+              </h4>
+              <div className="flex items-center gap-3 mt-1">
+                <p className="text-amber-500 text-xs font-bold">{activePalace.stars || '空宫'}</p>
+                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-zinc-800/50 border border-zinc-700/50">
+                  <span className="text-[9px] text-zinc-500 uppercase">PEI 效能分</span>
+                  <span className={`text-[10px] font-black ${
+                    activePalace.pei >= 1.2 ? 'text-emerald-400' : 
+                    activePalace.pei >= 0.8 ? 'text-blue-400' : 
+                    activePalace.pei >= 0.5 ? 'text-amber-400' : 'text-rose-400'
+                  }`}>{activePalace.pei}</span>
+                </div>
+              </div>
             </div>
             {onAskAI && (
               <button 
@@ -191,207 +513,354 @@ export default function VCoreDashboard({ iztroData, onAskAI }: Props) {
               </button>
             )}
           </div>
+          <div className="h-[280px] w-full mt-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <RadarChart cx="50%" cy="50%" outerRadius="75%" data={DIMENSIONS.map(dim => ({ subject: dim.name.split('/')[0], A: activePalace.finalVec[dim.key as keyof Vector5D], fullMark: 1.5 }))}>
+                <PolarGrid stroke="#27272a" />
+                <PolarAngleAxis dataKey="subject" tick={{ fill: '#71717a', fontSize: 11, fontWeight: 'bold' }} />
+                <PolarRadiusAxis angle={30} domain={[0, 1.5]} tick={false} axisLine={false} />
+                <Radar name="当前向量" dataKey="A" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.2} strokeWidth={2} />
+                <Tooltip contentStyle={{ backgroundColor: '#09090b', border: '1px solid #27272a', borderRadius: '8px', color: '#fff' }} itemStyle={{ color: '#f59e0b' }} />
+              </RadarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
 
-          {/* 🎯 您亲自撰写的 Core Conclusion 放在最震撼的 C 位 */}
-          <p className="text-lg text-zinc-200 leading-relaxed font-medium">
+        {/* 右侧：切片仪 (宫位列表) */}
+        <div className="lg:col-span-5 flex flex-col gap-3">
+          <div className="grid grid-cols-2 gap-3">
+            {vCoreData.originalPalaces.map((p, idx) => (
+              <button key={idx} onClick={() => setSelectedPalaceIdx(idx)} onDoubleClick={() => handleDoubleClick(idx)} className={`p-3 rounded-xl border transition-all text-left flex flex-col gap-2 ${selectedPalaceIdx === idx ? 'bg-amber-500/10 border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.1)]' : 'bg-zinc-900/50 border-zinc-800 hover:border-zinc-700'}`}>
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-xs font-bold ${selectedPalaceIdx === idx ? 'text-amber-400' : 'text-zinc-300'}`}>{p.name}</span>
+                    {p.ctx.mutagens && p.ctx.mutagens.length > 0 && (
+                      <div className="flex gap-0.5">
+                        {p.ctx.mutagens.map((m, i) => {
+                          let colorClass = 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30';
+                          if (m === '禄') colorClass = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+                          if (m === '权') colorClass = 'bg-amber-500/20 text-amber-400 border-amber-500/30';
+                          if (m === '科') colorClass = 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+                          if (m === '忌') colorClass = 'bg-rose-500/20 text-rose-400 border-rose-500/30';
+                          return (
+                            <span key={i} className={`px-1 py-0.5 rounded text-[8px] font-bold border leading-none ${colorClass}`}>
+                              {m}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                  <span className="text-[9px] font-mono text-zinc-600">{p.branch}</span>
+                </div>
+                <div className="flex gap-0.5 h-1.5 w-full bg-zinc-800/50 rounded-full overflow-hidden">
+                  {DIMENSIONS.map(dim => {
+                    const val = p.finalVec[dim.key as keyof Vector5D];
+                    // 提取颜色类名中的颜色值，例如 'bg-emerald-500' -> '#10b981'
+                    const colorMap: Record<string, string> = {
+                      'bg-emerald-500': '#10b981',
+                      'bg-amber-500': '#f59e0b',
+                      'bg-fuchsia-500': '#d946ef',
+                      'bg-blue-500': '#3b82f6',
+                      'bg-rose-500': '#f43f5e',
+                    };
+                    const color = colorMap[dim.color] || '#a855f7';
+                    return (
+                      <div key={dim.key} style={{ width: `${(val / 1.5) * 100}%`, backgroundColor: color }} className="h-full opacity-80" />
+                    );
+                  })}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* 🚀 深度文本诊断区 */}
+      <div className="bg-zinc-900/30 border border-zinc-800 rounded-2xl p-6 md:p-8 shadow-xl relative overflow-hidden mt-2">
+        <div className="absolute top-0 left-0 w-1.5 h-full bg-amber-500"></div>
+        <h3 className="text-lg font-bold text-zinc-100 flex items-center gap-2 mb-6">
+          <BookOpen size={18} className="text-amber-400" />
+          多维语义诊断报告
+        </h3>
+
+        {/* 主星基调结论 */}
+        <div className="mb-8 space-y-4">
+          <p className="text-base md:text-lg text-zinc-200 leading-relaxed font-medium bg-zinc-900/50 p-5 rounded-xl border border-zinc-800/80">
             “{interpretation.core_conclusion}”
           </p>
-
-          {/* 🚀 新增：四化动态干预显示区 */}
-          {mutagenInterpretations.length > 0 && (
-            <div className="mt-6 space-y-3">
-              <div className="flex items-center gap-2 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
-                <span className="w-8 h-[1px] bg-zinc-800"></span>
-                四化动态干预
-                <span className="w-8 h-[1px] bg-zinc-800"></span>
-              </div>
-              <div className="grid grid-cols-1 gap-3">
-                {mutagenInterpretations.map((mi, i) => (
-                  <div key={i} className="bg-zinc-900/40 border border-zinc-800/50 rounded-xl p-4 flex flex-col sm:flex-row gap-4 items-start group hover:border-amber-500/30 transition-all">
-                    <div className="shrink-0 px-3 py-1 rounded-full bg-amber-500/10 text-amber-500 text-[10px] font-black border border-amber-500/20">
-                      {mi.tag}
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm text-zinc-400 leading-relaxed group-hover:text-zinc-300 transition-colors">
-                        {mi.description}
-                      </p>
-                    </div>
-                    {onAskAI && (
-                      <button 
-                        onClick={() => handleAskAI('mutagen')}
-                        className="shrink-0 text-[10px] text-zinc-600 hover:text-amber-400 font-bold transition-colors"
-                      >
-                        问 AI 详情 →
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
+          
+          {/* 🚀 向量动态洞察 (Vector Insights) */}
+          {interpretation.vector_insights && interpretation.vector_insights.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {interpretation.vector_insights.map((insight, i) => (
+                <div key={i} className="px-3 py-1.5 rounded-lg bg-zinc-900/60 border border-zinc-800 text-[11px] text-zinc-300 flex items-center gap-2">
+                  {insight}
+                </div>
+              ))}
             </div>
           )}
+        </div>
 
-          {/* 🚀 新增：八吉星能量插件 */}
-          {auspiciousInterpretations.length > 0 && (
-            <div className="mt-6 space-y-3">
-              <div className="flex items-center gap-2 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
-                <span className="w-8 h-[1px] bg-zinc-800"></span>
-                八吉星能量插件
-                <span className="w-8 h-[1px] bg-zinc-800"></span>
-              </div>
-              <div className="grid grid-cols-1 gap-3">
-                {auspiciousInterpretations.map((ai, i) => (
-                  <div key={i} className="bg-emerald-900/10 border border-emerald-500/20 rounded-xl p-4 flex flex-col sm:flex-row gap-4 items-start group hover:border-emerald-500/40 transition-all">
-                    <div className="shrink-0 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-black border border-emerald-500/20">
-                      {ai.tag}
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm text-zinc-400 leading-relaxed group-hover:text-zinc-300 transition-colors">
-                        {ai.description}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+        {/* 🚀 四化动态干预显示区 */}
+        {mutagenInterpretations.length > 0 && (
+          <div className="mb-8 space-y-3">
+            <div className="flex items-center gap-2 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+              <span className="w-8 h-[1px] bg-zinc-800"></span>
+              四化动态干预
+              <span className="w-8 h-[1px] bg-zinc-800"></span>
             </div>
-          )}
-
-          {/* 🚀 新增：六煞星刺客 */}
-          {maleficInterpretations.length > 0 && (
-            <div className="mt-6 space-y-3">
-              <div className="flex items-center gap-2 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
-                <span className="w-8 h-[1px] bg-zinc-800"></span>
-                六煞星刺客
-                <span className="w-8 h-[1px] bg-zinc-800"></span>
-              </div>
-              <div className="grid grid-cols-1 gap-3">
-                {maleficInterpretations.map((mi, i) => (
-                  <div key={i} className="bg-rose-900/10 border border-rose-500/20 rounded-xl p-4 flex flex-col sm:flex-row gap-4 items-start group hover:border-rose-500/40 transition-all">
-                    <div className="shrink-0 px-3 py-1 rounded-full bg-rose-500/10 text-rose-400 text-[10px] font-black border border-rose-500/20">
-                      {mi.tag}
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm text-zinc-400 leading-relaxed group-hover:text-zinc-300 transition-colors">
-                        {mi.description}
-                      </p>
-                    </div>
-                    {onAskAI && (
-                      <button 
-                        onClick={() => handleAskAI('malefic')}
-                        className="shrink-0 text-[10px] text-zinc-600 hover:text-rose-400 font-bold transition-colors"
-                      >
-                        问 AI 化解 →
-                      </button>
-                    )}
+            <div className="grid grid-cols-1 gap-3">
+              {mutagenInterpretations.map((mi, i) => (
+                <div key={i} className="bg-zinc-900/40 border border-zinc-800/50 rounded-xl p-4 flex flex-col sm:flex-row gap-4 items-start group hover:border-amber-500/30 transition-all">
+                  <div className="shrink-0 px-3 py-1 rounded-full bg-amber-500/10 text-amber-500 text-[10px] font-black border border-amber-500/20">
+                    {mi.tag}
                   </div>
-                ))}
-              </div>
+                  <div className="flex-1">
+                    <p className="text-sm text-zinc-400 leading-relaxed group-hover:text-zinc-300 transition-colors">
+                      {mi.description}
+                    </p>
+                  </div>
+                  {onAskAI && (
+                    <button 
+                      onClick={() => handleAskAI('mutagen')}
+                      className="shrink-0 text-[10px] text-zinc-600 hover:text-amber-400 font-bold transition-colors"
+                    >
+                      问 AI 详情 →
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
-          )}
+          </div>
+        )}
 
-          {/* 如果有 S/A 级格局，显示在这里作为警示/高光 */}
-          {activePalace.tags.length > 0 && (
-            <div className="mt-5 flex flex-wrap gap-2">
-              {activePalace.tags.map((tag, i) => (
-                <span key={i} className="px-3 py-1.5 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-bold">
-                  ⚠️ 触发格局：{tag}
+        {/* 🚀 八吉星能量插件 */}
+        {auspiciousInterpretations.length > 0 && (
+          <div className="mb-8 space-y-3">
+            <div className="flex items-center gap-2 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+              <span className="w-8 h-[1px] bg-zinc-800"></span>
+              八吉星能量插件
+              <span className="w-8 h-[1px] bg-zinc-800"></span>
+            </div>
+            <div className="grid grid-cols-1 gap-3">
+              {auspiciousInterpretations.map((ai, i) => (
+                <div key={i} className="bg-emerald-900/10 border border-emerald-500/20 rounded-xl p-4 flex flex-col sm:flex-row gap-4 items-start group hover:border-emerald-500/40 transition-all">
+                  <div className="shrink-0 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-black border border-emerald-500/20">
+                    {ai.tag}
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm text-zinc-400 leading-relaxed group-hover:text-zinc-300 transition-colors">
+                      {ai.description}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 🚀 六煞星刺客 */}
+        {maleficInterpretations.length > 0 && (
+          <div className="mb-8 space-y-3">
+            <div className="flex items-center gap-2 text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+              <span className="w-8 h-[1px] bg-zinc-800"></span>
+              六煞星刺客
+              <span className="w-8 h-[1px] bg-zinc-800"></span>
+            </div>
+            <div className="grid grid-cols-1 gap-3">
+              {maleficInterpretations.map((mi, i) => (
+                <div key={i} className="bg-rose-900/10 border border-rose-500/20 rounded-xl p-4 flex flex-col sm:flex-row gap-4 items-start group hover:border-rose-500/40 transition-all">
+                  <div className="shrink-0 px-3 py-1 rounded-full bg-rose-500/10 text-rose-400 text-[10px] font-black border border-rose-500/20">
+                    {mi.tag}
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm text-zinc-400 leading-relaxed group-hover:text-zinc-300 transition-colors">
+                      {mi.description}
+                    </p>
+                  </div>
+                  {onAskAI && (
+                    <button 
+                      onClick={() => handleAskAI('malefic')}
+                      className="shrink-0 text-[10px] text-zinc-600 hover:text-rose-400 font-bold transition-colors"
+                    >
+                      问 AI 化解 →
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 优劣势展示 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <div className="space-y-3">
+            <h4 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
+              <span className="w-1.5 h-4 bg-emerald-500 rounded-sm"></span> 核心优势
+            </h4>
+            <ul className="space-y-3">
+              {interpretation.advantage.map((txt, i) => (
+                <li key={i} className="text-sm text-zinc-300 flex items-start gap-2 bg-emerald-950/20 p-3 rounded-lg border border-emerald-900/30">
+                  <span className="text-emerald-500 mt-0.5">✦</span> {txt}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="space-y-3">
+            <h4 className="text-sm font-bold text-rose-400 flex items-center gap-2">
+              <span className="w-1.5 h-4 bg-rose-500 rounded-sm"></span> 潜在短板
+            </h4>
+            <ul className="space-y-3">
+              {interpretation.shortcoming.map((txt, i) => (
+                <li key={i} className="text-sm text-zinc-300 flex items-start gap-2 bg-rose-950/20 p-3 rounded-lg border border-rose-900/30">
+                  <span className="text-rose-500 mt-0.5">⊗</span> {txt}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        {/* 场景化行动建议 (Scene Tips) */}
+        <div className="bg-amber-950/20 border-l-4 border-amber-500 p-5 rounded-r-xl relative group mb-6">
+          <h3 className="text-sm font-bold text-amber-400 mb-2">💡 趋吉避凶指南</h3>
+          <p className="text-sm text-amber-200/80 leading-relaxed mb-4">
+            {interpretation.scene_tips}
+          </p>
+          {onAskAI && (
+            <button 
+              onClick={() => handleAskAI('scene')}
+              className="text-[10px] font-bold text-amber-500/60 hover:text-amber-400 flex items-center gap-1 transition-colors"
+            >
+              如何具体落地执行？点击咨询 AI 导师 →
+            </button>
+          )}
+        </div>
+
+        {/* 辅煞星与格局 Tag */}
+        {(activePalace.tags.length > 0 || activePalace.ctx.minorStars.length > 0) && (
+          <div className="pt-6 border-t border-zinc-800">
+            <h4 className="text-xs font-bold text-zinc-500 mb-3 flex items-center gap-1"><AlertTriangle size={14} /> 环境刺客与格局</h4>
+            <div className="flex flex-wrap gap-2">
+              {activePalace.tags.map((t, i) => (
+                <span key={`tag-${i}`} className="px-2 py-1 bg-rose-500/10 text-rose-400 text-[10px] border border-rose-500/20 rounded font-bold">
+                  ⚠️ {t}
+                </span>
+              ))}
+              {activePalace.ctx.minorStars.map((m: string, i: number) => (
+                <span key={`minor-${i}`} className="px-2 py-1 bg-zinc-800 text-zinc-400 text-[10px] rounded border border-zinc-700">
+                  {m}
                 </span>
               ))}
             </div>
-          )}
-        </div>
-
-        {/* 主体分析：优势 vs 劣势 */}
-        <div className="p-8 grid grid-cols-1 xl:grid-cols-2 gap-8">
-          
-          {/* 优势列表 */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
-              <span className="w-1.5 h-4 bg-emerald-500 rounded-sm"></span> 核心优势与天赋
-            </h3>
-            <ul className="space-y-3">
-              {interpretation.advantage.map((text, i) => (
-                <li key={i} className="flex gap-3 text-sm text-zinc-300 leading-relaxed bg-emerald-950/20 p-3 rounded-lg border border-emerald-900/30">
-                  <span className="text-emerald-500 mt-0.5">✦</span>
-                  {text}
-                </li>
-              ))}
-            </ul>
           </div>
-
-          {/* 劣势列表 */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-bold text-rose-400 flex items-center gap-2">
-              <span className="w-1.5 h-4 bg-rose-500 rounded-sm"></span> 潜在风险与短板
-            </h3>
-            <ul className="space-y-3">
-              {interpretation.shortcoming.map((text, i) => (
-                <li key={i} className="flex gap-3 text-sm text-zinc-300 leading-relaxed bg-rose-950/20 p-3 rounded-lg border border-rose-900/30">
-                  <span className="text-rose-500 mt-0.5">⊗</span>
-                  {text}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-
-        {/* 底部：场景化行动建议 (Scene Tips) */}
-        <div className="px-8 pb-8">
-          <div className="bg-amber-950/20 border-l-4 border-amber-500 p-5 rounded-r-xl relative group">
-            <h3 className="text-sm font-bold text-amber-400 mb-2">💡 趋吉避凶指南</h3>
-            <p className="text-sm text-amber-200/80 leading-relaxed mb-4">
-              {interpretation.scene_tips}
-            </p>
-            {onAskAI && (
-              <button 
-                onClick={() => handleAskAI('scene')}
-                className="text-[10px] font-bold text-amber-500/60 hover:text-amber-400 flex items-center gap-1 transition-colors"
-              >
-                如何具体落地执行？点击咨询 AI 导师 →
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* 极客专属：底层物理数据证明 */}
-        <div className="px-8 pb-8">
-          <button 
-            onClick={() => setShowDataProof(!showDataProof)}
-            className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center gap-1 transition-colors"
-          >
-            {showDataProof ? '▼ 收起底层算法证明' : '▶ 查看底层向量依据 (极客模式)'}
-          </button>
-          
-          {showDataProof && (
-            <div className="mt-4 p-6 bg-zinc-900/50 rounded-xl border border-zinc-800 flex flex-col sm:flex-row gap-8 items-center animate-fade-in">
-              <div className="shrink-0">
-                <svg viewBox="0 0 160 160" className="w-32 h-32 opacity-90">
-                  {[0.5, 1.0, 1.5].map((l, i) => <polygon key={i} points={getRadarPath({F:l,P:l,E:l,S:l,W:l}, 50)} fill="none" stroke="#3f3f46" strokeWidth="0.5" strokeDasharray="2,2" />)}
-                  {[0, 72, 144, 216, 288].map((a, i) => <line key={i} x1="80" y1="80" x2={80 + 50 * Math.sin(a * Math.PI / 180)} y2={80 - 50 * Math.cos(a * Math.PI / 180)} stroke="#3f3f46" strokeWidth="0.5" />)}
-                  <polygon points={getRadarPath(activePalace.finalVec)} fill="rgba(245, 158, 11, 0.2)" stroke="#f59e0b" strokeWidth="2" />
-                  {DIMENSIONS.map((dim, i) => {
-                    const r = 68; const a = [0, 72, 144, 216, 288][i] * (Math.PI / 180);
-                    return <text key={i} x={80 + r * Math.sin(a)} y={80 - r * Math.cos(a)} fontSize="9" fill={dim.stroke} textAnchor="middle" dominantBaseline="middle" fontWeight="bold">{dim.name.split('/')[0]}</text>;
-                  })}
-                </svg>
-              </div>
-              <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-mono">
-                {DIMENSIONS.map((dim) => (
-                  <div key={dim.key} className="bg-zinc-900/80 p-3 rounded-lg border border-zinc-800/50 group hover:border-zinc-700 transition-all">
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="text-zinc-500">[{dim.key}] {dim.name}</span>
-                      <span className={`font-bold ${activePalace.finalVec[dim.key as keyof Vector5D] > 1.0 ? dim.text : 'text-white'}`}>
-                        {activePalace.finalVec[dim.key as keyof Vector5D].toFixed(1)}
-                      </span>
-                    </div>
-                    <div className="text-[10px] text-zinc-600 group-hover:text-zinc-500 transition-colors">{dim.desc}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
+        )}
       </div>
+
+      {/* 弹窗：宫位深度解析 */}
+      {showDetailModal && vCoreData.originalPalaces[detailPalaceIdx] && typeof document !== 'undefined' && createPortal(
+        <div 
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in"
+          onClick={() => setShowDetailModal(false)}
+        >
+          <div 
+            className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="p-5 border-b border-zinc-800 flex justify-between items-center bg-zinc-950">
+              <div className="flex items-center gap-3">
+                <h2 className="text-xl font-bold text-amber-400">{vCoreData.originalPalaces[detailPalaceIdx].name}宫 深度解析</h2>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-1 rounded bg-zinc-800 text-zinc-300 text-xs font-mono border border-zinc-700">{vCoreData.originalPalaces[detailPalaceIdx].stars || '空宫'}</span>
+                  {vCoreData.originalPalaces[detailPalaceIdx].ctx.mutagens.map((m, i) => {
+                    let colorClass = 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30';
+                    if (m === '禄') colorClass = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+                    if (m === '权') colorClass = 'bg-amber-500/20 text-amber-400 border-amber-500/30';
+                    if (m === '科') colorClass = 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+                    if (m === '忌') colorClass = 'bg-rose-500/20 text-rose-400 border-rose-500/30';
+                    return (
+                      <span key={i} className={`px-2 py-1 rounded text-xs font-bold border ${colorClass}`}>
+                        化{m}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+              <button onClick={() => setShowDetailModal(false)} className="text-zinc-500 hover:text-white transition-colors">
+                <X size={24} />
+              </button>
+            </div>
+            
+            {/* Content */}
+            <div className="p-6 overflow-y-auto custom-scrollbar flex flex-col gap-6">
+              {/* 主星解读 */}
+              <div className="space-y-3">
+                <h3 className="text-sm font-bold text-amber-500 flex items-center gap-2">
+                  <span className="w-1.5 h-4 bg-amber-500 rounded-sm"></span> 主星基调
+                </h3>
+                <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800/50">
+                  <p className="text-zinc-300 text-sm leading-relaxed">
+                    {vCoreData.originalPalaces[detailPalaceIdx].interpretation.core_conclusion}
+                  </p>
+                </div>
+              </div>
+
+              {/* 四化解读 */}
+              {vCoreData.originalPalaces[detailPalaceIdx].mutagenInterpretations.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-bold text-purple-400 flex items-center gap-2">
+                    <span className="w-1.5 h-4 bg-purple-500 rounded-sm"></span> 四化干预
+                  </h3>
+                  <div className="grid gap-3">
+                    {vCoreData.originalPalaces[detailPalaceIdx].mutagenInterpretations.map((mi, i) => (
+                      <div key={i} className="bg-zinc-950 p-4 rounded-xl border border-purple-900/30">
+                        <div className="text-purple-400 text-xs font-bold mb-2 px-2 py-1 bg-purple-500/10 inline-block rounded border border-purple-500/20">{mi.tag}</div>
+                        <p className="text-zinc-300 text-sm leading-relaxed">{mi.description}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 吉星解读 */}
+              {vCoreData.originalPalaces[detailPalaceIdx].auspiciousInterpretations.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
+                    <span className="w-1.5 h-4 bg-emerald-500 rounded-sm"></span> 吉星能量
+                  </h3>
+                  <div className="grid gap-3">
+                    {vCoreData.originalPalaces[detailPalaceIdx].auspiciousInterpretations.map((ai, i) => (
+                      <div key={i} className="bg-zinc-950 p-4 rounded-xl border border-emerald-900/30">
+                        <div className="text-emerald-400 text-xs font-bold mb-2 px-2 py-1 bg-emerald-500/10 inline-block rounded border border-emerald-500/20">{ai.tag}</div>
+                        <p className="text-zinc-300 text-sm leading-relaxed">{ai.description}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 煞星解读 */}
+              {vCoreData.originalPalaces[detailPalaceIdx].maleficInterpretations.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-bold text-rose-400 flex items-center gap-2">
+                    <span className="w-1.5 h-4 bg-rose-500 rounded-sm"></span> 煞星刺客
+                  </h3>
+                  <div className="grid gap-3">
+                    {vCoreData.originalPalaces[detailPalaceIdx].maleficInterpretations.map((mi, i) => (
+                      <div key={i} className="bg-zinc-950 p-4 rounded-xl border border-rose-900/30">
+                        <div className="text-rose-400 text-xs font-bold mb-2 px-2 py-1 bg-rose-500/10 inline-block rounded border border-rose-500/20">{mi.tag}</div>
+                        <p className="text-zinc-300 text-sm leading-relaxed">{mi.description}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

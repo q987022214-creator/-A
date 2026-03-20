@@ -1,10 +1,13 @@
 // src/utils/vCoreInterpreter.ts
 
+import { Vector5D } from './vCoreEngine';
+
 export interface PalaceInterpretation {
   core_conclusion: string;
   advantage: string[];
   shortcoming: string[];
   scene_tips: string;
+  vector_insights?: string[]; // 新增：基于向量的动态洞察
 }
 
 // 🗄️ 预配置解读文本库 (当前批次：紫微系全十二宫)
@@ -418,25 +421,92 @@ export const MALEFIC_INTERPRETATION_DICT: Record<string, Record<string, MinorSta
 // 🧠 核心翻译器：增强版，支持提取四化解读
 export class VCoreInterpreter {
   // 1. 获取主星基调解读
-  static getBaseInterpretation(mainStars: string[], palaceName: string): PalaceInterpretation {
+  static getBaseInterpretation(mainStars: string[], palaceName: string, vector: Vector5D): PalaceInterpretation {
     let key = "通用_兜底";
+    let interpretation: PalaceInterpretation;
     
-    // 宽泛匹配，后续可扩展精准匹配
+    // 👑 【紫微星动态状态路由】演示
     if (mainStars.includes("紫微")) {
-      key = `紫微_${palaceName}宫`;
-    } 
-    // ... 后续补充其他星系的判断逻辑 ...
-    
-    if (PALACE_INTERPRETATION_DICT[key]) {
-      return PALACE_INTERPRETATION_DICT[key];
+      if (palaceName === "财帛") {
+        // ⚖️ 状态判定：如果 财(F) + 权(P) 的世俗欲望，大于 情(E) + 稳(S) 的精神防守
+        if ((vector.F + vector.P) > (vector.E + vector.S)) {
+          interpretation = {
+            core_conclusion: "【物质霸权态】您赚钱的核心逻辑是“以权生财、以名带利”。您对金钱的支配欲极强，追求的是“掌握资金的绝对分配权”。",
+            advantage: ["极其适合在大平台担任财务调度、项目总控。", "具有赚“大钱”的顶层视野。"],
+            shortcoming: ["日常开销极大，容易出现表面风光现金吃紧。", "眼光过高，不屑赚小钱。"],
+            scene_tips: "投资自己的人设、混入高端圈子，是您来财的捷径。"
+          };
+        } else {
+          interpretation = {
+            core_conclusion: "【精神孤高态】您的紫微星褪去了世俗的铜臭味。您追求的是“清贵的财富”，不屑于为了五斗米折腰，带有极强的精神洁癖。",
+            advantage: ["对金钱有极其理智的宏观认知，不轻易受诱惑。", "容易依靠极高的专业壁垒或名声被动生财。"],
+            shortcoming: ["过于清高，极易错失眼前短平快的赚钱风口。", "遇到债务问题拉不下脸面去讨要。"],
+            scene_tips: "不要强迫自己去迎合低俗市场，走“高、精、尖”的顾问/咨询路线最适合您。"
+          };
+        }
+      } else {
+        key = `紫微_${palaceName}宫`;
+        interpretation = PALACE_INTERPRETATION_DICT[key] || this.getFallbackInterpretation(mainStars, palaceName);
+      }
+    } else {
+      interpretation = this.getFallbackInterpretation(mainStars, palaceName);
     }
 
+    // 🚀 注入基于向量的动态洞察
+    interpretation.vector_insights = this.getVectorInsights(palaceName, vector);
+    
+    return interpretation;
+  }
+
+  private static getFallbackInterpretation(mainStars: string[], palaceName: string): PalaceInterpretation {
     return {
       core_conclusion: `您的【${palaceName}宫】由 ${mainStars.length > 0 ? mainStars.join('') : '无主星'} 坐守。此处星曜组合较为复杂，代表了您在此领域的独特宿命与轨迹。`,
       advantage: ["在相关领域具有独特的潜能，等待挖掘。"],
       shortcoming: ["可能会面临一些隐性的情绪内耗或外界压力。"],
       scene_tips: "（正在等待大师录入此星系的深度解析剧本...）"
     };
+  }
+
+  /**
+   * 📊 核心：基于五维向量的动态洞察引擎
+   */
+  private static getVectorInsights(palaceName: string, vector: Vector5D): string[] {
+    const insights: string[] = [];
+
+    // 1. 财富/资源 (F) 维度
+    if (vector.F > 1.2) {
+      if (palaceName === '财帛') insights.push("💰 财气冲天：您的现金流吞吐量极大，具备运作大宗资产的潜质。");
+      if (palaceName === '田宅') insights.push("🏠 库位充盈：您的不动产缘分极佳，易有祖业继承或豪宅入账。");
+    }
+
+    // 2. 权力/执行 (P) 维度
+    if (vector.P > 1.2) {
+      if (palaceName === '官禄') insights.push("⚡ 权柄在握：您在职场中具备极强的统御力，适合担任决策层。");
+      if (palaceName === '命宫') insights.push("🦁 领袖气质：您自带霸道总裁气场，行事果决，不甘人后。");
+    }
+
+    // 3. 情感/人际 (E) 维度
+    if (vector.E > 1.2) {
+      if (palaceName === '夫妻') insights.push("❤️ 情深似海：您的感情世界极度浓烈，容易体验到刻骨铭心的爱恋。");
+      if (palaceName === '交友') insights.push("🤝 众星捧月：您在社交圈中极具魅力，容易获得他人的情感支持。");
+    }
+
+    // 4. 稳定/防御 (S) 维度
+    if (vector.S < 0.6) {
+      insights.push("⚠️ 底盘不稳：该宫位缺乏足够的防御力，极易受到外界环境的冲击，需防患于未然。");
+    }
+
+    // 5. 动荡/波动 (W) 维度
+    if (vector.W > 1.2) {
+      insights.push("🌊 变动剧烈：此领域变数极多，计划往往赶不上变化，建议保持灵活的应对姿态。");
+    }
+
+    // 6. 复合维度判断 (权+钱)
+    if (vector.F > 1.0 && vector.P > 1.0) {
+      if (palaceName === '财帛') insights.push("💎 以权生财：您擅长利用社会地位或职场权力来变现，名利双收。");
+    }
+
+    return insights;
   }
 
   // 2. 🚀 新增：获取四化动态干预解读

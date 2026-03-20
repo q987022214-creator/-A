@@ -63,7 +63,7 @@ export const generateNativeChart = (options: NativeChartOptions) => {
         ];
 
         return {
-          name: p.name,
+          name: p.name.replace('仆役', '交友'),
           heavenlyStem: p.heavenlyStem,
           earthlyBranch: p.earthlyBranch,
           ganzhi: p.heavenlyStem + p.earthlyBranch,

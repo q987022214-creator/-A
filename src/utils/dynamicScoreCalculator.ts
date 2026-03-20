@@ -423,7 +423,7 @@ export function generateLifeTrendMatrix(basePalaces: any[], decades: any[], base
     for (let domainIdx = 0; domainIdx < 12; domainIdx++) {
       const targetPhysIdx = (decLifeIdx - domainIdx + 12) % 12;
       const physBranch = BRANCHES[targetPhysIdx]; 
-      const physName = basePalaces.find((p:any)=>p.earthlyBranch === physBranch)?.name.replace('宫', '') + '宫';
+      const physName = (basePalaces.find((p:any)=>p.earthlyBranch === physBranch)?.name.replace('宫', '') + '宫').replace('仆役', '交友');
 
       const basePalaceData = baseScoresData.find((p: any) => p.earthlyBranch === physBranch);
       const bScore = Number(basePalaceData?.matrixScore ?? 0);
@@ -507,7 +507,7 @@ export function generateYearlyTrendMatrix(basePalaces: any[], decades: any[], ba
     for (let domainIdx = 0; domainIdx < 12; domainIdx++) {
       const targetPhysIdx = (yLifeIdx - domainIdx + 12) % 12;
       const physBranch = BRANCHES[targetPhysIdx]; 
-      const physName = basePalaces.find((p:any)=>p.earthlyBranch === physBranch)?.name.replace('宫', '') + '宫';
+      const physName = (basePalaces.find((p:any)=>p.earthlyBranch === physBranch)?.name.replace('宫', '') + '宫').replace('仆役', '交友');
       const targetPhysicalPalace = basePalaces.find((p:any) => p.earthlyBranch === physBranch);
 
       // 1. 继承原局与大限的底座
