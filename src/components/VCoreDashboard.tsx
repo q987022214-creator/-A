@@ -2,8 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { 
-  Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Tooltip,
-  BarChart, Bar, XAxis, YAxis, Cell, CartesianGrid, LineChart, Line
+  Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Tooltip
 } from 'recharts';
 import { 
   Cpu, BookOpen, AlertTriangle, X, TrendingUp, BarChart3, ChevronRight, ChevronLeft
@@ -13,8 +12,7 @@ import { VCoreEngine, VectorMath, PalaceContext, Vector5D } from '../utils/vCore
 import { VCoreInterpreter } from '../utils/vCoreInterpreter';
 import { SEMANTIC_MAPPINGS } from '../utils/vCoreData';
 import { calculatePalaceEfficiencyIndex, calculateDecadeGlobalScore, getScoreColorTier } from '../utils/vCoreVisualizer';
-import { VCoreTrendChart, DecadeTrendData } from './VCoreTrendChart';
-import { VCorePalaceBar, PalaceScoreData } from './VCorePalaceBar';
+import { VCoreTrendChart } from './VCoreTrendChart';
 import { VCoreBottomSheet, BottomSheetData } from './VCoreBottomSheet';
 
 interface Props {
@@ -35,8 +33,6 @@ export default function VCoreDashboard({ iztroData, onAskAI }: Props) {
   const [showDataProof, setShowDataProof] = useState<boolean>(false);
   const [showDetailModal, setShowDetailModal] = useState<boolean>(false);
   const [detailPalaceIdx, setDetailPalaceIdx] = useState<number>(0);
-  const [activeDecadeIdx, setActiveDecadeIdx] = useState<number>(0);
-  const [activeYearIdx, setActiveYearIdx] = useState<number>(0);
   const [sheetData, setSheetData] = useState<BottomSheetData | null>(null);
 
   const handleDoubleClick = (idx: number) => {
@@ -203,32 +199,7 @@ export default function VCoreDashboard({ iztroData, onAskAI }: Props) {
 
   if (!vCoreData) return null;
   const activePalace = vCoreData.originalPalaces[selectedPalaceIdx];
-  const activeDecade = vCoreData.decadeTrends[activeDecadeIdx];
   const { interpretation, mutagenInterpretations, auspiciousInterpretations, maleficInterpretations } = activePalace;
-
-  // 准备新组件所需的数据
-  const trendChartData: DecadeTrendData[] = vCoreData.decadeTrends.map((d: any, idx: number) => ({
-    decadeRange: d.range,
-    score: d.dgs,
-    isCurrent: idx === activeDecadeIdx
-  }));
-
-  const palaceBarData: PalaceScoreData[] = activeDecade.palaces.map((p: any) => ({
-    palaceName: p.name,
-    score: p.score,
-    rawVector: p.vector
-  }));
-
-  // 当点击柱状图时触发：
-  const handlePalaceClick = (item: PalaceScoreData) => {
-    if (item.rawVector) {
-      setSheetData({
-        title: `大限${item.palaceName}`,
-        score: item.score,
-        vector: item.rawVector
-      });
-    }
-  };
 
   // 🚀 封装 AI 对话触发器
   const handleAskAI = (type: 'depth' | 'mutagen' | 'scene' | 'malefic') => {
@@ -291,197 +262,24 @@ export default function VCoreDashboard({ iztroData, onAskAI }: Props) {
         </div>
       </div>
 
-      {/* --- 新增：战力排行与运势起伏 --- */}
-      <div className="flex flex-col gap-4 w-full">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <VCoreTrendChart 
-            data={trendChartData} 
-            onDecadeClick={(d) => {
-              const idx = vCoreData.decadeTrends.findIndex(dt => dt.range === d.decadeRange);
-              if (idx !== -1) setActiveDecadeIdx(idx);
-            }} 
-          />
-          <VCorePalaceBar 
-            data={palaceBarData} 
-            onPalaceClick={handlePalaceClick} 
-          />
-        </div>
-      </div>
+      {/* --- 超级大盘：大运、流年、宫位三合一引擎 --- */}
+      <VCoreTrendChart 
+        data={vCoreData.decadeTrends} 
+        onPalaceClick={(palace, decadeRange) => {
+          // 呼出您原本写好的 BottomSheet 即可！
+          setSheetData({
+            title: `${decadeRange}岁大限 · ${palace.name}`,
+            score: palace.score,
+            vector: palace.vector
+          });
+        }} 
+      />
 
       <VCoreBottomSheet 
         isOpen={!!sheetData} 
         data={sheetData} 
         onClose={() => setSheetData(null)} 
       />
-
-      {/* --- 顶部趋势图表区 --- */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 大限趋势图 */}
-        <div className="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-5 flex flex-col">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <TrendingUp size={18} className="text-emerald-400" />
-              <h4 className="text-sm font-bold text-zinc-100">人生大限趋势 (DGS)</h4>
-            </div>
-            <span className="text-[10px] text-zinc-500 font-mono">Algorithm B: Decade Global Score</span>
-          </div>
-          <div className="h-[180px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart 
-                data={vCoreData.decadeTrends} 
-                onClick={(data) => { 
-                  if (data && data.activeTooltipIndex !== undefined) {
-                    setActiveDecadeIdx(Number(data.activeTooltipIndex)); 
-                  }
-                }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-                <XAxis dataKey="range" tick={{ fill: '#71717a', fontSize: 9 }} axisLine={false} tickLine={false} />
-                <YAxis hide domain={[0, 1.5]} />
-                <Tooltip 
-                  cursor={{ fill: '#27272a', opacity: 0.4 }}
-                  content={({ active, payload }) => {
-                    if (active && payload && payload.length) {
-                      const data = payload[0].payload;
-                      const tier = getScoreColorTier(data.dgs);
-                      const colors = { excellent: 'text-emerald-400', good: 'text-blue-400', warning: 'text-amber-400', danger: 'text-rose-400' };
-                      return (
-                        <div className="bg-zinc-950 border border-zinc-800 p-2 rounded-lg shadow-xl">
-                          <p className="text-[10px] text-zinc-500 mb-1">{data.range} 岁 ({data.branch})</p>
-                          <p className={`text-xs font-black ${colors[tier]}`}>综合评分: {data.dgs}</p>
-                        </div>
-                      );
-                    }
-                    return null;
-                  }}
-                />
-                <Bar dataKey="dgs" radius={[4, 4, 0, 0]}>
-                  {vCoreData.decadeTrends.map((entry: any, index: number) => {
-                    const tier = getScoreColorTier(entry.dgs);
-                    const colors = { excellent: '#10b981', good: '#3b82f6', warning: '#f59e0b', danger: '#f43f5e' };
-                    return <Cell key={`cell-${index}`} fill={colors[tier]} fillOpacity={activeDecadeIdx === index ? 1 : 0.4} stroke={activeDecadeIdx === index ? '#fff' : 'none'} strokeWidth={1} />;
-                  })}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="flex justify-between items-center mt-3 px-2">
-            <div className="flex gap-4">
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                <span className="text-[9px] text-zinc-500">高峰</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-full bg-rose-500"></div>
-                <span className="text-[9px] text-zinc-500">低谷</span>
-              </div>
-            </div>
-            <p className="text-[10px] text-zinc-400 italic">点击柱体切换大限详情</p>
-          </div>
-        </div>
-
-        {/* 单大限宫位战力榜 */}
-        <div className="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-5 flex flex-col">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <BarChart3 size={18} className="text-amber-400" />
-              <h4 className="text-sm font-bold text-zinc-100">
-                {activeDecade.range}岁 宫位战力榜 (PEI)
-              </h4>
-            </div>
-            <div className="flex items-center gap-1">
-              <button 
-                onClick={() => setActiveDecadeIdx(prev => Math.max(0, prev - 1))}
-                className="p-1 hover:bg-zinc-800 rounded transition-colors text-zinc-500 hover:text-zinc-200"
-              >
-                <ChevronLeft size={14} />
-              </button>
-              <button 
-                onClick={() => setActiveDecadeIdx(prev => Math.min(11, prev + 1))}
-                className="p-1 hover:bg-zinc-800 rounded transition-colors text-zinc-500 hover:text-zinc-200"
-              >
-                <ChevronRight size={14} />
-              </button>
-            </div>
-          </div>
-          <div className="h-[180px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart layout="vertical" data={activeDecade.palaces.slice(0, 6)} margin={{ left: 10, right: 30 }}>
-                <XAxis type="number" hide domain={[0, 1.5]} />
-                <YAxis dataKey="name" type="category" tick={{ fill: '#a1a1aa', fontSize: 10, fontWeight: 'bold' }} axisLine={false} tickLine={false} width={50} />
-                <Tooltip 
-                  cursor={{ fill: '#27272a', opacity: 0.4 }}
-                  content={({ active, payload }) => {
-                    if (active && payload && payload.length) {
-                      const data = payload[0].payload;
-                      return (
-                        <div className="bg-zinc-950 border border-zinc-800 p-2 rounded-lg shadow-xl">
-                          <p className="text-xs font-black text-amber-400">{data.name}: {data.score}</p>
-                        </div>
-                      );
-                    }
-                    return null;
-                  }}
-                />
-                <Bar dataKey="score" radius={[0, 4, 4, 0]} barSize={12}>
-                  {activeDecade.palaces.slice(0, 6).map((entry: any, index: number) => {
-                    const tier = getScoreColorTier(entry.score);
-                    const colors = { excellent: '#10b981', good: '#3b82f6', warning: '#f59e0b', danger: '#f43f5e' };
-                    return <Cell key={`cell-pei-${index}`} fill={colors[tier]} />;
-                  })}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="mt-2 flex justify-end">
-             <span className="text-[9px] text-zinc-500">显示该大限最强 6 宫位</span>
-          </div>
-        </div>
-      </div>
-
-      {/* --- 流年趋势图表区 --- */}
-      <div className="bg-zinc-900/30 border border-zinc-800 rounded-2xl p-5 flex flex-col">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <TrendingUp size={18} className="text-blue-400" />
-            <h4 className="text-sm font-bold text-zinc-100">{activeDecade.range} 岁 流年走势 (YGS)</h4>
-          </div>
-          <span className="text-[10px] text-zinc-500 font-mono">Yearly Global Score</span>
-        </div>
-        <div className="h-[120px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={activeDecade.yearlyTrends}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-              <XAxis dataKey="label" tick={{ fill: '#71717a', fontSize: 9 }} axisLine={false} tickLine={false} />
-              <YAxis hide domain={[0, 1.5]} />
-              <Tooltip 
-                cursor={{ fill: '#27272a', opacity: 0.4 }}
-                content={({ active, payload }) => {
-                  if (active && payload && payload.length) {
-                    const data = payload[0].payload;
-                    const tier = getScoreColorTier(data.ygs);
-                    const colors = { excellent: 'text-emerald-400', good: 'text-blue-400', warning: 'text-amber-400', danger: 'text-rose-400' };
-                    return (
-                      <div className="bg-zinc-950 border border-zinc-800 p-2 rounded-lg shadow-xl">
-                        <p className="text-[10px] text-zinc-500 mb-1">{data.age} 岁</p>
-                        <p className={`text-xs font-black ${colors[tier]}`}>流年评分: {data.ygs}</p>
-                      </div>
-                    );
-                  }
-                  return null;
-                }}
-              />
-              <Bar dataKey="ygs" radius={[2, 2, 0, 0]}>
-                {activeDecade.yearlyTrends.map((entry: any, index: number) => {
-                  const tier = getScoreColorTier(entry.ygs);
-                  const colors = { excellent: '#10b981', good: '#3b82f6', warning: '#f59e0b', danger: '#f43f5e' };
-                  return <Cell key={`cell-year-${index}`} fill={colors[tier]} fillOpacity={0.6} />;
-                })}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
 
       {/* --- 图表数据区 --- */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
