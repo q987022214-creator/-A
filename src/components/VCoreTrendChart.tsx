@@ -166,8 +166,8 @@ export const VCoreTrendChart: React.FC<Props> = ({ data, onPalaceClick }) => {
         <div className="mt-4 pt-4 border-t border-zinc-800/60 animate-in fade-in slide-in-from-top-2">
           <div className="flex justify-between items-center mb-3 bg-zinc-900/50 p-2 rounded-lg border border-zinc-800/50">
             <h4 className="text-zinc-200 font-bold text-sm flex items-center gap-2">
-              <span className="bg-zinc-800 px-2 py-0.5 rounded text-xs border border-zinc-700 flex items-center gap-1">
-                📅 {isDecadeMode ? (activeDetail as any).range : `${(activeDetail as any).age}岁`} {isDecadeMode ? `${(activeDetail as any).stem}${(activeDetail as any).branch}限` : `年`}
+              <span className="bg-zinc-900 px-2 py-0.5 rounded text-xs border border-zinc-700 flex items-center gap-1">
+                📅 {isDecadeMode ? (activeDetail as DecadeData).range : `${(activeDetail as YearlyTrend).age}岁`} {isDecadeMode ? `${(activeDetail as DecadeData).stem}${(activeDetail as DecadeData).branch}限` : `年`}
               </span>
               {selectedTarget === 'global' ? (isDecadeMode ? '大限宫位效能' : '流年宫位效能') : `${selectedTarget} 效能`}
             </h4>
@@ -175,7 +175,7 @@ export const VCoreTrendChart: React.FC<Props> = ({ data, onPalaceClick }) => {
               {getScore(activeDetail).toFixed(2)}
             </div>
           </div>
-
+ 
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
             {activeDetail.palaces.map((p: any, idx: number) => {
               const isPositive = p.score >= 1.0;
@@ -183,7 +183,7 @@ export const VCoreTrendChart: React.FC<Props> = ({ data, onPalaceClick }) => {
                 <div 
                   key={idx} 
                   className={`group flex justify-between items-center bg-zinc-900/30 hover:bg-zinc-800/80 border ${selectedTarget === p.name ? 'border-indigo-500/50 bg-indigo-900/20' : 'border-zinc-800/50 hover:border-zinc-700'} px-2 py-0.5 rounded cursor-pointer transition-all`}
-                  onClick={() => onPalaceClick && onPalaceClick(p, isDecadeMode ? (activeDetail as any).range : `${(activeDetail as any).age}岁`)}
+                  onClick={() => onPalaceClick && onPalaceClick(p, isDecadeMode ? (activeDetail as DecadeData).range : `${(activeDetail as YearlyTrend).age}岁`)}
                 >
                   <div className="flex flex-col">
                     <span className="text-zinc-300 text-xs font-medium">{p.name}</span>

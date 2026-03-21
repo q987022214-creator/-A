@@ -665,32 +665,11 @@ export default function ChatRoom() {
                             if (!clean.startsWith('{')) clean = clean.match(/\{[\s\S]*\}/)?.[0] || '{}';
                             const obj = JSON.parse(clean);
                             if (!obj.rawParams) return <div className="p-10 text-zinc-500 text-center mt-20">文本导入旧数据，请使用原生排盘开启互动</div>;
-                            
-                            // 🌟 架构师核心修复：手动接管 iztro 底层引擎，算好大限流年！
-                            const bType = obj.rawParams.birthdayType || 'solar';
-                            const isLeap = obj.rawParams.isLeapMonth || false;
-                            
-                            let astrolabeInstance;
-                            if (bType === 'lunar') {
-                              astrolabeInstance = astro.byLunar(obj.rawParams.birthday, obj.rawParams.birthTime, obj.rawParams.gender, isLeap, true, 'zh-CN');
-                            } else {
-                              astrolabeInstance = astro.bySolar(obj.rawParams.birthday, obj.rawParams.birthTime, obj.rawParams.gender, true, 'zh-CN');
-                            }
-
-                            // 🌟 强行注入时空穿梭机的时间，引擎会自动算出正确的蓝字(大限)和红字(流年)
-                            if (selectedDecadeIndex !== null || selectedYear !== null) {
-                              astrolabeInstance.horoscope(focusDate);
-                            }
-
                             return (
                               <div className="w-full h-full flex items-center justify-center overflow-hidden">
                                 <div className="relative w-full h-full flex items-center justify-center">
-                                  <div className="origin-center transform scale-[0.35] sm:scale-[0.55] md:scale-[0.68] lg:scale-[0.81] xl:scale-[0.89] transition-all duration-500 ease-in-out flex items-center justify-center" style={{ width: '1000px', height: '1000px', minWidth: '1000px', minHeight: '1000px' }}>
-                                    <Iztrolabe 
-                                      key={`iztro-instance-${selectedDecadeIndex}-${selectedYear}-${focusDate.getTime()}`}
-                                      {...({ astrolabe: astrolabeInstance } as any)}
-                                      width={1000} 
-                                    />
+                                  <div className="origin-center transform scale-[0.33] sm:scale-[0.52] md:scale-[0.65] lg:scale-[0.77] xl:scale-[0.85] transition-all duration-500 ease-in-out flex items-center justify-center" style={{ width: '1000px', height: '1000px', minWidth: '1000px', minHeight: '1000px' }}>
+                                    <Iztrolabe width={1000} birthday={obj.rawParams.birthday} birthTime={obj.rawParams.birthTime} birthdayType={obj.rawParams.birthdayType || 'solar'} gender={obj.rawParams.gender} {...((selectedDecadeIndex !== null || selectedYear !== null) ? { horoscopeDate: `${focusDate.getFullYear()}-${String(focusDate.getMonth() + 1).padStart(2, '0')}-${String(focusDate.getDate()).padStart(2, '0')}` } : {})} />
                                   </div>
                                 </div>
                               </div>

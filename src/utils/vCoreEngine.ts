@@ -3,24 +3,6 @@ import { Vector5D, STAR_SYSTEMS, AFFLICTIONS, TRANSFORMS, DYNAMIC_STACK_RULES } 
 
 export type { Vector5D };
 
-export interface YearlyTrend {
-  age: number;
-  ygs: number;
-  label: string;
-  palaces: { name: string; score: number; vector: Vector5D; }[];
-  stem?: string;
-  branch?: string;
-}
-
-export interface DecadeData {
-  range: string;
-  dgs: number;
-  palaces: { name: string; score: number; vector: Vector5D; }[];
-  yearlyTrends: YearlyTrend[];
-  branch: string;
-  stem: string;
-}
-
 // 宫位物理上下文定义
 export interface PalaceContext {
   branch: string;           // 地支 (子, 丑...)
@@ -28,6 +10,22 @@ export interface PalaceContext {
   minorStars: string[];     // 辅煞星数组
   mutagens: string[];       // 四化数组 (禄, 权, 科, 忌)
   selfMutagen: string | null; // 宫干自化 (禄,权,科,忌, null)
+}
+
+export interface DecadeData {
+  range: string;
+  dgs: number;
+  palaces: any[];
+  yearlyTrends: YearlyTrend[];
+  branch: string;
+  stem: string;
+}
+
+export interface YearlyTrend {
+  age: number;
+  ygs: number;
+  label: string;
+  palaces: any[];
 }
 
 // 👑 引擎基座：五维向量数学内核
