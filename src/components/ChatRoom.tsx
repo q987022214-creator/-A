@@ -670,7 +670,6 @@ export default function ChatRoom() {
                                 <div className="relative w-full h-full flex items-center justify-center">
                                   <div className="origin-center transform scale-[0.35] sm:scale-[0.55] md:scale-[0.68] lg:scale-[0.81] xl:scale-[0.89] transition-all duration-500 ease-in-out flex items-center justify-center" style={{ width: '1000px', height: '1000px', minWidth: '1000px', minHeight: '1000px' }}>
                                     <Iztrolabe 
-                                      /* 🔥 核心修复：注入动态 key，只要大限/流年一变，立刻强制 Iztrolabe 组件粉碎并携带新时间重生 */
                                       key={`iztro-${selectedDecadeIndex}-${selectedYear}-${focusDate.getTime()}`}
                                       width={1000} 
                                       birthday={obj.rawParams.birthday} 
