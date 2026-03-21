@@ -63,10 +63,10 @@ export default function TrendHistogram({ iztroData }: Props) {
   const numericScores = currentDataArray.map(item => item.totalDelta);
   const maxAbsValue = Math.max(...numericScores.map(Math.abs), 20); 
 
-  // 🚀 核心几何计算：折线图限定在上半部分 (10% ~ 40%)，绝不与柱状图混叠
+  // 🚀 核心几何计算：折线图限定在上半部分 (-15% ~ 15%)，绝不与柱状图混叠
   const svgPoints = currentDataArray.map((item, i) => {
     const x = i * 100 + 50; 
-    const y = 25 - (item.totalDelta / maxAbsValue) * 15; 
+    const y = -15 - (item.totalDelta / maxAbsValue) * 15; 
     return `${x},${y}`;
   }).join(' ');
 
@@ -132,7 +132,7 @@ export default function TrendHistogram({ iztroData }: Props) {
             const isSelected = selectedDecadeIdx === idx;
             
             // 折线图圆点 Y 轴位置
-            const lineY = 25 - (score / maxAbsValue) * 15; 
+            const lineY = -15 - (score / maxAbsValue) * 15; 
             
             return (
               <div key={idx} onClick={() => setSelectedDecadeIdx(isSelected ? null : idx)} className="relative flex flex-col items-center w-[8%] h-full group cursor-pointer pointer-events-auto">

@@ -43,8 +43,8 @@ export const VCoreTrendChart: React.FC<Props> = ({ data, onPalaceClick }) => {
     return currentArray.map((item: any, i: number) => {
       const score = getScore(item);
       const x = ((i + 0.5) / currentArray.length) * 1000;
-      // Map score 0.1~1.5 to Y 60~10 (higher score = lower Y = higher visually)
-      const y = 60 - (Math.min(score, 1.5) / 1.5) * 50;
+      // Map score 0.1~1.5 to Y 20~-30 (向上平移 40%)
+      const y = 20 - (Math.min(score, 1.5) / 1.5) * 50;
       return `${x},${y}`;
     }).join(' ');
   }, [currentArray, getScore]);
