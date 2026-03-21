@@ -1,205 +1,199 @@
-import React, { useState, useMemo } from 'react';
-import { getScoreColorTier } from '../utils/vCoreVisualizer';
-
-// ----------------- 类型定义 -----------------
-export interface PalaceScore {
-  name: string;
-  score: number;
-  vector: any;
-}
-
-export interface YearlyTrend {
-  age: number;
-  ygs: number;
-  label: string;
-}
-
-export interface DecadeData {
-  range: string;       // e.g., "15-24"
-  branch: string;      // 地支
-  dgs: number;         // 大限全局综合分
-  palaces: PalaceScore[]; // 该大限下12宫的PEI排名
-  yearlyTrends: YearlyTrend[]; // 该大限的流年走势
-}
+import React, { useState, useMemo, useCallback } from 'react';
+import { DecadeData, YearlyTrend } from '../utils/vCoreEngine';
 
 interface Props {
   data: DecadeData[];
-  onPalaceClick?: (palace: PalaceScore, decadeRange: string) => void;
+  onPalaceClick?: (palace: any, decadeRange: string) => void;
 }
 
-// ----------------- 颜色配置映射 -----------------
-const colorMap = {
-  excellent: { bar: 'bg-emerald-500', line: '#10b981', text: 'text-emerald-400' },
-  good: { bar: 'bg-blue-500', line: '#3b82f6', text: 'text-blue-400' },
-  warning: { bar: 'bg-amber-500', line: '#f59e0b', text: 'text-amber-400' },
-  danger: { bar: 'bg-rose-500', line: '#f43f5e', text: 'text-rose-400' },
-};
-
 export const VCoreTrendChart: React.FC<Props> = ({ data, onPalaceClick }) => {
-  // 视图模式：'decade' (大限) | 'year' (流年)
   const [viewMode, setViewMode] = useState<'decade' | 'year'>('decade');
-  // 当前选中的大限索引 (用于展示内联面板)
-  const [selectedDecadeIdx, setSelectedDecadeIdx] = useState<number | null>(null);
-  // 当进入流年模式时，目标大限的索引
   const [targetDecadeForYearly, setTargetDecadeForYearly] = useState<number>(0);
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+  const [selectedTarget, setSelectedTarget] = useState<string>('global');
 
-  // ----------------- 核心数据提取与缩放 -----------------
   const isDecadeMode = viewMode === 'decade';
   const currentArray = isDecadeMode 
     ? data 
     : (data[targetDecadeForYearly]?.yearlyTrends || []);
 
-  // 生成 SVG 折线路径 (0.1 ~ 1.5 的范围映射到 100 ~ 0 的 Y 轴坐标)
+  const palaceNames = useMemo(() => {
+    if (!data || data.length === 0 || !data[0].palaces) return [];
+    return data[0].palaces.map(p => p.name);
+  }, [data]);
+
+  const getScore = useCallback((item: any) => {
+    if (selectedTarget === 'global') {
+      return isDecadeMode ? item.dgs : item.ygs;
+    }
+    const palace = item.palaces?.find((p: any) => p.name === selectedTarget);
+    return palace ? palace.score : 1.0;
+  }, [selectedTarget, isDecadeMode]);
+
+  // Calculate baseline and max deviation for mapping
+  const { maxDeviation } = useMemo(() => {
+    if (!currentArray || currentArray.length === 0) return { maxDeviation: 0.3 };
+    const scores = currentArray.map((item: any) => getScore(item));
+    const maxDev = Math.max(...scores.map((s: number) => Math.abs(s - 1.0)), 0.3);
+    return { maxDeviation: maxDev };
+  }, [currentArray, getScore]);
+
+  // Generate SVG polyline points (mapped to top 10% - 40%)
   const svgPoints = useMemo(() => {
     return currentArray.map((item: any, i: number) => {
-      const score = isDecadeMode ? item.dgs : item.ygs;
-      const x = (i / (currentArray.length - 1 || 1)) * 1000; // 撑满 1000 宽度的 viewBox
-      const y = 100 - ((score - 0.1) / 1.4) * 100; // 将 0.1-1.5 映射到 0-100%，Y轴翻转
+      const score = getScore(item);
+      const x = ((i + 0.5) / currentArray.length) * 1000;
+      // Map score 0.1~1.5 to Y 60~10 (higher score = lower Y = higher visually)
+      const y = 60 - (Math.min(score, 1.5) / 1.5) * 50;
       return `${x},${y}`;
     }).join(' ');
-  }, [currentArray, isDecadeMode]);
+  }, [currentArray, getScore]);
 
   if (!data || data.length === 0) return null;
 
-  const activeDetail = selectedDecadeIdx !== null ? data[selectedDecadeIdx] : null;
+  const activeDetail = selectedIdx !== null ? currentArray[selectedIdx] : null;
 
   return (
-    <div className="bg-zinc-950/80 backdrop-blur-md border border-zinc-800/60 rounded-xl p-4 md:p-5 w-full shadow-2xl transition-all duration-300">
+    <div className="bg-zinc-950/60 backdrop-blur-md border border-zinc-800/60 rounded-xl p-4 w-full mb-4 shadow-xl transition-all duration-300">
       
-      {/* 🎛️ 顶部控制栏 */}
-      <div className="flex justify-between items-center mb-6 border-b border-zinc-800/60 pb-3">
+      {/* 控制栏 (极简紧凑) */}
+      <div className="flex justify-between items-center mb-4 border-b border-zinc-800/60 pb-3">
         <div className="flex items-center gap-3">
-          <h3 className="text-zinc-100 font-bold text-sm flex items-center gap-2 tracking-wide">
-            <span className={`w-2 h-2 rounded-full ${isDecadeMode ? 'bg-emerald-500' : 'bg-blue-500 animate-pulse'}`}></span>
-            {isDecadeMode ? '人生大运起伏 (DGS)' : `${data[targetDecadeForYearly].range}岁 流年推演 (YGS)`}
-          </h3>
-          {!isDecadeMode && (
-            <button 
-              onClick={() => { setViewMode('decade'); setSelectedDecadeIdx(null); }} 
-              className="text-[10px] font-bold bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 px-2.5 py-1 rounded transition-colors border border-zinc-700"
+           <h3 className="text-emerald-400 font-bold text-sm flex items-center gap-2">
+             <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
+             {isDecadeMode ? '大限综合走势' : '流年精准推演'}
+           </h3>
+           {viewMode === 'year' && (
+              <button onClick={() => { setViewMode('decade'); setSelectedIdx(null); }} className="text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2 py-1 rounded transition-colors border border-zinc-700">
+                🔙 返回大限盘
+              </button>
+           )}
+        </div>
+
+        <div className="flex gap-2">
+          {viewMode === 'year' && (
+            <select 
+               className="bg-zinc-900 border border-zinc-700 text-indigo-300 text-xs font-bold rounded px-2 py-1 outline-none hover:bg-zinc-800 cursor-pointer"
+               value={targetDecadeForYearly}
+               onChange={(e) => { setTargetDecadeForYearly(Number(e.target.value)); setSelectedIdx(null); }}
             >
-              🔙 返回大运盘
-            </button>
+               {data.map((dec, i) => (
+                 <option key={i} value={i}>🎯 {dec.range}岁</option>
+               ))}
+            </select>
           )}
+          
+          <select
+            className="bg-zinc-900 border border-zinc-700 text-zinc-300 text-xs font-bold rounded px-3 py-1 outline-none hover:bg-zinc-800 cursor-pointer"
+            value={selectedTarget}
+            onChange={(e) => setSelectedTarget(e.target.value)}
+          >
+            <option value="global">🌟 综合大盘走势</option>
+            {palaceNames.map(name => (
+              <option key={name} value={name}>
+                📍 {isDecadeMode ? '大限' : '流年'}{name} 走势
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
-      {/* 🚀 核心图表区 (折柱分离，高度极限压缩) */}
-      <div className="relative h-48 w-full flex items-end justify-between px-2 bg-zinc-900/30 rounded-lg border border-zinc-800/40 pt-4 mb-2">
+      {/* 🚀 核心图表区：高度极限压缩至 h-40，折柱分离 */}
+      <div className="relative h-40 w-full flex items-end justify-between px-2 bg-zinc-900/20 rounded-lg border border-zinc-800/40 mt-2 mb-8">
         
-        {/* 🟡 独立图层：SVG 趋势折线 */}
-        <svg viewBox="0 -10 1000 120" preserveAspectRatio="none" className="absolute inset-0 w-full h-full pointer-events-none z-10 overflow-visible opacity-80">
-          <polyline 
-            points={svgPoints} 
-            fill="none" 
-            stroke={isDecadeMode ? '#f59e0b' : '#3b82f6'} // 大运用橙黄，流年用科技蓝
-            strokeWidth="3" 
-            vectorEffect="non-scaling-stroke" 
-            strokeLinecap="round" 
-            strokeLinejoin="round" 
-          />
-        </svg>
+        {/* 底部基准线 (沉降到底部 25% 的位置) */}
+        <div className="absolute left-0 right-0 bottom-[25%] border-t border-zinc-700/60 border-dashed w-full z-0"></div>
 
-        {/* 辅助基准线 */}
-        <div className="absolute left-0 right-0 top-[50%] border-t border-zinc-700/40 border-dashed w-full z-0"></div>
-
-        {/* 柱状图与交互区 */}
-        <div className="absolute inset-0 w-full h-full flex justify-between z-20 pointer-events-none px-2">
+        {/* 互动与柱状图容器层 (z-10) */}
+        <div className="absolute inset-0 w-full h-full flex justify-between z-10 pointer-events-none">
           {currentArray.map((item: any, idx: number) => {
-            const score = isDecadeMode ? item.dgs : item.ygs;
+            const score = getScore(item);
             const label = isDecadeMode ? item.range : `${item.age}岁`;
-            const tier = getScoreColorTier(score);
-            const barHeight = Math.max(5, ((score - 0.1) / 1.4) * 100); // 0.1~1.5 -> 5%~100%
-            const isSelected = selectedDecadeIdx === idx;
+            const subLabel = isDecadeMode ? `${item.stem}${item.branch}限` : `年`;
             
-            // 计算圆点在 Y 轴的位置
-            const lineY = 100 - ((score - 0.1) / 1.4) * 100; 
-
+            const isPositive = score >= 1.0;
+            
+            // 柱子高度：从 bottom 25% 向上生长，最高占 40%
+            const barHeight = Math.max(2, (Math.min(score, 1.5) / 1.5) * 40); 
+            const isSelected = selectedIdx === idx;
+            
+            // 折线图圆点 Y 轴位置
+            const lineY = 60 - (Math.min(score, 1.5) / 1.5) * 50; 
+            
             return (
-              <div 
-                key={idx} 
-                onClick={() => isDecadeMode && setSelectedDecadeIdx(isSelected ? null : idx)} 
-                className={`relative flex flex-col items-center flex-1 h-full group ${isDecadeMode ? 'cursor-pointer pointer-events-auto' : ''}`}
-              >
-                {/* 交互高亮背景 */}
-                <div className={`absolute inset-0 w-[80%] mx-auto h-full rounded transition-colors z-0 ${isSelected ? 'bg-zinc-800/50' : 'hover:bg-zinc-800/30'}`}></div>
+              <div key={idx} onClick={() => setSelectedIdx(isSelected ? null : idx)} className="relative flex flex-col items-center w-[8%] h-full group cursor-pointer pointer-events-auto">
+                
+                {/* 交互高亮底色 */}
+                <div className={`absolute inset-0 w-full h-full rounded transition-colors z-0 ${isSelected ? 'bg-zinc-800/30' : 'hover:bg-zinc-800/20'}`}></div>
 
-                {/* 折线图上的节点光晕 */}
-                <div 
-                  className={`absolute w-2.5 h-2.5 bg-zinc-950 border-2 rounded-full z-30 transition-transform ${isSelected ? 'scale-150 border-white' : `border-[${colorMap[tier].line}] group-hover:scale-125`}`} 
-                  style={{ top: `calc(${lineY}% - 5px)` }}
-                />
+                {/* 🟢 折线图圆点 (z-30) - 动态颜色 */}
+                <div className={`absolute w-2.5 h-2.5 bg-zinc-900 border-2 ${isPositive ? 'border-emerald-500' : 'border-rose-500'} rounded-full z-30 transition-transform shadow-md ${isSelected ? 'scale-125' : 'group-hover:scale-125'}`} style={{ top: `calc(${lineY}% - 5px)` }}></div>
 
-                {/* 悬浮分数提示 */}
-                <div className={`absolute text-[10px] font-mono font-bold z-40 opacity-0 group-hover:opacity-100 transition-opacity ${colorMap[tier].text}`}
-                     style={{ top: `calc(${lineY}% - 24px)` }}>
+                {/* 🎯 探查流年按钮 (精简版) */}
+                {isDecadeMode && isSelected && (
+                  <div onClick={(e) => { e.stopPropagation(); setTargetDecadeForYearly(idx); setViewMode('year'); setSelectedIdx(null); }} className="absolute -top-6 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] px-2 py-1 rounded shadow-lg z-50 whitespace-nowrap cursor-pointer">
+                    🔍 流年
+                  </div>
+                )}
+
+                {/* 🌟 剥离特效的纯色数值：紧贴柱子尖端，动态颜色 */}
+                <div className={`absolute text-[10px] font-mono font-bold z-40 ${isPositive ? 'text-emerald-500' : 'text-rose-500'}`}
+                     style={{ bottom: `calc(25% + ${barHeight}% + 4px)` }}>
                   {score.toFixed(2)}
                 </div>
 
-                {/* 柱体主干 */}
-                <div 
-                  className={`absolute bottom-0 w-full max-w-[14px] rounded-t-sm transition-all duration-500 z-10 opacity-70 group-hover:opacity-100 ${colorMap[tier].bar} ${isSelected ? 'brightness-125 ring-1 ring-white/50' : ''}`} 
-                  style={{ height: `${barHeight}%` }}
-                />
+                {/* 🟩 统一向上生长的动态颜色柱子 */}
+                <div className={`absolute bottom-[25%] w-full max-w-[14px] rounded-t-sm transition-all duration-300 z-10 ${isPositive ? 'bg-gradient-to-b from-emerald-400/80 to-emerald-500/10' : 'bg-gradient-to-b from-rose-400/80 to-rose-500/10'} ${isSelected ? 'brightness-125 ring-1 ring-white/30' : 'opacity-80 group-hover:opacity-100'}`} style={{ height: `${barHeight}%`, minHeight: '2px' }}></div>
 
-                {/* 底部 X 轴标签 */}
-                <div className={`absolute top-[100%] mt-2 text-[10px] text-center leading-tight transition-colors z-20 whitespace-nowrap ${isSelected ? 'text-zinc-100 font-bold' : 'text-zinc-500 group-hover:text-zinc-300'}`}>
-                  {label}
-                  {isDecadeMode && <span className="block text-[8px] opacity-50 font-mono mt-0.5">{item.branch}</span>}
+                {/* 底部极简标签 */}
+                <div className={`absolute top-[80%] text-[10px] text-center leading-tight transition-colors z-20 ${isSelected ? 'text-yellow-500 font-bold' : 'text-zinc-400 group-hover:text-zinc-300'}`}>
+                  <span className="block">{label}</span>
+                  <span className="block text-[9px] opacity-60">{subLabel}</span>
                 </div>
               </div>
             );
           })}
         </div>
+
+        {/* 🟡 独立图层：悬浮的纯黄折线图 (z-20) - 线条变细 50% */}
+        <svg viewBox="0 0 1000 100" preserveAspectRatio="none" className="absolute inset-0 w-full h-full pointer-events-none z-20 overflow-visible opacity-90 drop-shadow-md">
+          <polyline points={svgPoints} fill="none" stroke="#eab308" strokeWidth="1.5" vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </div>
 
-      {/* 🗂️ 大限内联展开面板 (取代原本独立的 VCorePalaceBar) */}
-      {isDecadeMode && activeDetail && (
-        <div className="mt-10 pt-4 border-t border-zinc-800/60 animate-in slide-in-from-top-4 fade-in duration-300">
-          
-          <div className="flex justify-between items-center mb-4">
+      {/* 🗂️ 详情核算单面板 (高度压缩，去掉臃肿 padding) */}
+      {activeDetail && activeDetail.palaces && (
+        <div className="mt-4 pt-4 border-t border-zinc-800/60 animate-in fade-in slide-in-from-top-2">
+          <div className="flex justify-between items-center mb-3 bg-zinc-900/50 p-2 rounded-lg border border-zinc-800/50">
             <h4 className="text-zinc-200 font-bold text-sm flex items-center gap-2">
-              <span className="bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded text-xs border border-amber-500/30">
-                {activeDetail.range}岁
+              <span className="bg-zinc-800 px-2 py-0.5 rounded text-xs border border-zinc-700 flex items-center gap-1">
+                📅 {isDecadeMode ? activeDetail.range : `${activeDetail.age}岁`} {isDecadeMode ? `${activeDetail.stem}${activeDetail.branch}限` : `年`}
               </span>
-              大限宫位效能分析 (PEI)
+              {selectedTarget === 'global' ? (isDecadeMode ? '大限宫位效能' : '流年宫位效能') : `${selectedTarget} 效能`}
             </h4>
-            
-            {/* 核心交互：进入流年下钻 */}
-            <button 
-              onClick={() => {
-                setTargetDecadeForYearly(selectedDecadeIdx!);
-                setViewMode('year');
-                setSelectedDecadeIdx(null);
-              }}
-              className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-lg transition-all"
-            >
-              🔍 探查本大限流年
-            </button>
+            <div className={`text-lg font-bold font-mono px-3 py-0.5 rounded bg-zinc-950 border ${getScore(activeDetail) >= 1.0 ? 'text-emerald-500 border-emerald-500/30' : 'text-rose-500 border-rose-500/30'}`}>
+              {getScore(activeDetail).toFixed(2)}
+            </div>
           </div>
 
-          {/* 微型条形图：显示该大限最强的 6 个宫位 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2">
-            {activeDetail.palaces.slice(0, 6).map((p, idx) => {
-              const tier = getScoreColorTier(p.score);
-              const widthPercent = Math.max(0, Math.min(100, ((p.score - 0.1) / 1.4) * 100));
-              
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+            {activeDetail.palaces.map((p: any, idx: number) => {
+              const isPositive = p.score >= 1.0;
               return (
                 <div 
                   key={idx} 
-                  className="group flex items-center cursor-pointer bg-zinc-900/40 hover:bg-zinc-800/60 p-1.5 rounded transition-colors"
-                  onClick={() => onPalaceClick && onPalaceClick(p, activeDetail.range)}
+                  className={`group flex justify-between items-center bg-zinc-900/30 hover:bg-zinc-800/80 border ${selectedTarget === p.name ? 'border-indigo-500/50 bg-indigo-900/20' : 'border-zinc-800/50 hover:border-zinc-700'} px-2 py-0.5 rounded cursor-pointer transition-all`}
+                  onClick={() => onPalaceClick && onPalaceClick(p, isDecadeMode ? activeDetail.range : `${activeDetail.age}岁`)}
                 >
-                  <div className="w-14 shrink-0 text-[11px] text-zinc-400 font-medium group-hover:text-zinc-200">
-                    {p.name}
+                  <div className="flex flex-col">
+                    <span className="text-zinc-300 text-xs font-medium">{p.name}</span>
+                    {p.vector && (
+                      <span className="text-[8px] text-zinc-500 font-mono mt-0.5">
+                        F{p.vector.F} P{p.vector.P} E{p.vector.E} S{p.vector.S} W{p.vector.W}
+                      </span>
+                    )}
                   </div>
-                  <div className="flex-1 h-3.5 bg-zinc-800 rounded-full overflow-hidden relative">
-                    <div 
-                      className={`h-full transition-all duration-700 ease-out rounded-full ${colorMap[tier].bar}`}
-                      style={{ width: `${widthPercent}%` }}
-                    />
-                  </div>
-                  <div className={`w-8 shrink-0 text-right text-[10px] font-mono font-bold ml-2 ${colorMap[tier].text}`}>
+                  <div className={`text-xs font-mono font-bold ${isPositive ? 'text-emerald-500' : 'text-rose-500'}`}>
                     {p.score.toFixed(2)}
                   </div>
                 </div>

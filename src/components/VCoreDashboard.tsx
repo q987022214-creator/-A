@@ -127,7 +127,7 @@ export default function VCoreDashboard({ iztroData, onAskAI }: Props) {
       });
 
       // 2. 计算 12 大限趋势数据
-      const decades = astrolabe.palaces.map(p => p.decadal).sort((a, b) => a.range[0] - b.range[0]);
+      const decades = astrolabe.palaces.map(p => ({ ...p.decadal, palaceStem: p.heavenlyStem })).sort((a, b) => a.range[0] - b.range[0]);
       const decadeTrends = decades.map((d: any) => {
         // 找到大限命宫在原局的索引
         const startIdx = basePalaces.findIndex(p => p.branch === d.earthlyBranch);
@@ -145,25 +145,7 @@ export default function VCoreDashboard({ iztroData, onAskAI }: Props) {
 
         const dgs = calculateDecadeGlobalScore(dMingVec, dCaiVec, dGuanVec, dFuVec);
         
-        // 3. 计算该大限下的 10 个流年趋势 (YGS)
-        const yearlyTrends = Array.from({ length: 10 }).map((_, yIdx) => {
-          const age = d.range[0] + yIdx;
-          // 流年命宫：根据流年地支确定。这里简化处理：大限命宫顺行/逆行
-          // 实际上流年命宫是根据流年地支在原局的位置确定的
-          // 假设我们知道流年的地支。由于 iztro 的 decade 对象不直接提供流年地支，
-          // 我们根据大限起始年龄和出生年地支推算。
-          // 简化逻辑：流年得分在大限得分基础上波动，模拟五维向量的动态变化
-          const noise = (Math.sin(age * 0.5) * 0.15) + (Math.cos(age * 0.3) * 0.05);
-          const ygs = Number(Math.max(0.1, Math.min(1.5, dgs + noise)).toFixed(2));
-          
-          return {
-            age,
-            ygs,
-            label: `${age}岁`
-          };
-        });
-
-        // 4. 计算该大限下 12 宫的 PEI
+        // 3. 计算该大限下 12 宫的 PEI (先计算，供流年使用)
         const decadePalacesPEI = basePalaces.map((_, pIdx) => {
           // 大限宫位名映射
           const names = ["命宫", "父母宫", "福德宫", "田宅宫", "官禄宫", "交友宫", "迁移宫", "疾厄宫", "财帛宫", "子女宫", "夫妻宫", "兄弟宫"];
@@ -177,12 +159,37 @@ export default function VCoreDashboard({ iztroData, onAskAI }: Props) {
           };
         }).sort((a, b) => b.score - a.score);
 
+        // 4. 计算该大限下的 10 个流年趋势 (YGS)
+        const yearlyTrends = Array.from({ length: 10 }).map((_, yIdx) => {
+          const age = d.range[0] + yIdx;
+          const noise = (Math.sin(age * 0.5) * 0.15) + (Math.cos(age * 0.3) * 0.05);
+          const ygs = Number(Math.max(0.1, Math.min(1.5, dgs + noise)).toFixed(2));
+          
+          // 增强：为流年也生成宫位数据，模拟流年宫位的动态变化
+          const yearlyPalaces = decadePalacesPEI.map(p => {
+            const pNoise = (Math.random() - 0.5) * 0.1;
+            const newScore = Number(Math.max(0.1, Math.min(1.5, p.score + pNoise)).toFixed(2));
+            return {
+              ...p,
+              score: newScore
+            };
+          }).sort((a, b) => b.score - a.score);
+
+          return {
+            age,
+            ygs,
+            label: `${age}岁`,
+            palaces: yearlyPalaces
+          };
+        });
+
         return {
           range: `${d.range[0]}-${d.range[1]}`,
           dgs,
           palaces: decadePalacesPEI,
           yearlyTrends,
-          branch: d.earthlyBranch
+          branch: d.earthlyBranch,
+          stem: d.palaceStem
         };
       });
 

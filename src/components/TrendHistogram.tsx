@@ -117,16 +117,11 @@ export default function TrendHistogram({ iztroData }: Props) {
       {/* 🚀 核心图表区：高度极限压缩至 h-40，折柱分离 */}
       <div className="relative h-40 w-full flex items-end justify-between px-2 bg-zinc-900/20 rounded-lg border border-zinc-800/40 mt-2 mb-8">
         
-        {/* 🟡 独立图层：悬浮的纯黄折线图 */}
-        <svg viewBox="0 0 1000 100" preserveAspectRatio="none" className="absolute inset-0 w-full h-full pointer-events-none z-10 overflow-visible opacity-90">
-          <polyline points={svgPoints} fill="none" stroke="#eab308" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-
         {/* 0轴基准线 (沉降到底部 65% 的位置) */}
         <div className="absolute left-0 right-0 top-[65%] border-t border-zinc-700/60 border-dashed w-full z-0"></div>
 
-        {/* 互动与柱状图容器层 */}
-        <div className="absolute inset-0 w-full h-full flex justify-between z-20 pointer-events-none">
+        {/* 互动与柱状图容器层 (z-10) */}
+        <div className="absolute inset-0 w-full h-full flex justify-between z-10 pointer-events-none">
           {currentDataArray.map((item, idx) => {
             const score = item.totalDelta;
             const hasActivation = item.activationScore > 0 || item.domainScore > 0;
@@ -145,8 +140,8 @@ export default function TrendHistogram({ iztroData }: Props) {
                 {/* 交互高亮底色 */}
                 <div className={`absolute inset-0 w-full h-full rounded transition-colors z-0 ${isSelected ? 'bg-zinc-800/30' : 'hover:bg-zinc-800/20'}`}></div>
 
-                {/* 🟡 折线图圆点 */}
-                <div className={`absolute w-2 h-2 bg-zinc-900 border-2 border-yellow-500 rounded-full z-30 transition-transform ${isSelected ? 'scale-125' : 'group-hover:scale-125'}`} style={{ top: `calc(${lineY}% - 4px)` }}></div>
+                {/* 🟡 折线图圆点 (z-30) */}
+                <div className={`absolute w-2.5 h-2.5 bg-zinc-900 border-2 border-yellow-500 rounded-full z-30 transition-transform shadow-md ${isSelected ? 'scale-125' : 'group-hover:scale-125'}`} style={{ top: `calc(${lineY}% - 5px)` }}></div>
 
                 {/* 🎯 探查流年按钮 (精简版) */}
                 {viewMode === 'decade' && isSelected && (
@@ -163,12 +158,12 @@ export default function TrendHistogram({ iztroData }: Props) {
 
                 {/* 🟩 极简适中宽度的正向柱子 */}
                 {isPositive && (
-                  <div className={`absolute bottom-[35%] w-full max-w-[12px] rounded-t-sm transition-all duration-300 z-10 ${isSelected ? 'bg-emerald-400' : 'bg-emerald-500 group-hover:bg-emerald-400'}`} style={{ height: `${barHeight}%`, minHeight: '2px' }}></div>
+                  <div className={`absolute bottom-[35%] w-full max-w-[14px] rounded-t-sm transition-all duration-300 z-10 bg-gradient-to-b from-emerald-500/80 to-emerald-500/10 ${isSelected ? 'brightness-125 ring-1 ring-white/30' : 'opacity-80 group-hover:opacity-100'}`} style={{ height: `${barHeight}%`, minHeight: '2px' }}></div>
                 )}
 
                 {/* 🟥 极简适中宽度的负向柱子 */}
                 {!isPositive && (
-                  <div className={`absolute top-[65%] w-full max-w-[12px] rounded-b-sm transition-all duration-300 z-10 ${isSelected ? 'bg-rose-400' : 'bg-rose-500 group-hover:bg-rose-400'}`} style={{ height: `${barHeight}%`, minHeight: '2px' }}></div>
+                  <div className={`absolute top-[65%] w-full max-w-[14px] rounded-b-sm transition-all duration-300 z-10 bg-gradient-to-t from-rose-500/80 to-rose-500/10 ${isSelected ? 'brightness-125 ring-1 ring-white/30' : 'opacity-80 group-hover:opacity-100'}`} style={{ height: `${barHeight}%`, minHeight: '2px' }}></div>
                 )}
 
                 {/* ✨ 沉降的得位徽章 */}
@@ -187,6 +182,11 @@ export default function TrendHistogram({ iztroData }: Props) {
             );
           })}
         </div>
+
+        {/* 🟡 独立图层：悬浮的纯黄折线图 (z-20) */}
+        <svg viewBox="0 0 1000 100" preserveAspectRatio="none" className="absolute inset-0 w-full h-full pointer-events-none z-20 overflow-visible opacity-90 drop-shadow-md">
+          <polyline points={svgPoints} fill="none" stroke="#eab308" strokeWidth="3" vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </div>
 
       {/* 🗂️ 详情核算单面板 (高度压缩，去掉臃肿 padding) */}
