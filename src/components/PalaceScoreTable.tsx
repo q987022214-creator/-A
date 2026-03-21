@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { calculateChartScores, PalaceScore } from '../utils/scoreCalculator';
 import { recognizePatterns } from '../utils/patternRecognizer'; 
 import PatternDashboard from './PatternDashboard';
-import { ChevronDown, ChevronUp, Trophy, AlertTriangle, Minus, Zap, Activity, Award, ShieldAlert, Sparkles } from 'lucide-react';
+import { Trophy, AlertTriangle, Minus, Zap, Activity, Award, ShieldAlert, Sparkles } from 'lucide-react';
 import { astro } from 'iztro';
 import { VCoreEngine, VectorMath, Vector5D } from '../utils/vCoreEngine';
 import { PALACE_INTERPRETATIONS } from '../data/vCoreInterpretations';
@@ -11,8 +11,15 @@ interface PalaceScoreTableProps {
   iztroData: any;
 }
 
+// 固定的十二宫标准排盘顺序
+const STANDARD_ORDER = [
+  "命宫", "兄弟宫", "夫妻宫", "子女宫", "财帛宫", "疾厄宫", 
+  "迁移宫", "交友宫", "官禄宫", "田宅宫", "福德宫", "父母宫"
+];
+
 export default function PalaceScoreTable({ iztroData }: PalaceScoreTableProps) {
-  const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  // 默认展开命宫，避免初次进入时页面空旷
+  const [expandedRow, setExpandedRow] = useState<string | null>('命宫');
 
   const patterns = useMemo(() => {
     try {
@@ -45,7 +52,7 @@ export default function PalaceScoreTable({ iztroData }: PalaceScoreTableProps) {
     }
   }, [iztroData, patterns]);
 
-  // 🌟 架构师新增：后台静默提取 5D 向量，供文本解读使用
+  // 后台静默提取 5D 向量
   const vCoreVectors = useMemo(() => {
     if (!iztroData) return {};
     try {
@@ -110,7 +117,6 @@ export default function PalaceScoreTable({ iztroData }: PalaceScoreTableProps) {
     }
   }, [iztroData]);
 
-  // 🌟 架构师新增：根据动态阈值，抽取出对应的解读文案
   const getActiveInterpretations = (palaceName: string, vector: Vector5D | undefined) => {
     if (!vector) return [];
     const cleanName = palaceName.replace(/(本命|大限|流年)/g, '').trim();
@@ -121,7 +127,6 @@ export default function PalaceScoreTable({ iztroData }: PalaceScoreTableProps) {
     const interpretations = PALACE_INTERPRETATIONS[dictKey];
     if (!interpretations) return [];
 
-    // 自适应极值提取（哪怕全都是 0.8，也会选出相对最高的一项作为主导特征）
     const maxVal = Math.max(vector.F, vector.P, vector.E, vector.S, vector.W);
     const activeThreshold = maxVal >= 1.2 ? 1.2 : maxVal; 
 
@@ -138,7 +143,6 @@ export default function PalaceScoreTable({ iztroData }: PalaceScoreTableProps) {
     if (vector.S >= activeThreshold && interpretations.S_High) {
       active.push({ label: '稳健底盘 (S)', text: interpretations.S_High, icon: <ShieldAlert size={14}/>, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' });
     }
-    // W为反向指标，代表动荡高危
     if (vector.W >= activeThreshold && interpretations.W_High) {
       active.push({ label: '动荡高危 (W)', text: interpretations.W_High, icon: <ShieldAlert size={14}/>, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20' });
     }
@@ -154,241 +158,229 @@ export default function PalaceScoreTable({ iztroData }: PalaceScoreTableProps) {
     );
   }
 
-  const strongPalaces = scores.slice(0, 4);
-  const neutralPalaces = scores.slice(4, 8);
-  const weakPalaces = scores.slice(8, 12);
+  // 1. 将分数进行全局排名，用于判定强弱颜色
+  const sortedScores = [...scores].sort((a, b) => b.finalScore - a.finalScore);
+  const getTier = (palaceName: string) => {
+    const idx = sortedScores.findIndex(s => s.palaceName === palaceName);
+    if (idx < 4) return 'strong';
+    if (idx < 8) return 'neutral';
+    return 'weak';
+  };
 
-  const renderPalaceRow = (p: PalaceScore, groupType: 'strong' | 'neutral' | 'weak') => {
-    const isExpanded = expandedRow === p.palaceName;
-    const statusColor = groupType === 'strong' ? 'text-emerald-400' : groupType === 'weak' ? 'text-red-400' : 'text-zinc-400';
-    const statusBg = groupType === 'strong' ? 'bg-emerald-500/10' : groupType === 'weak' ? 'bg-red-500/10' : 'bg-zinc-500/10';
-    const statusBorder = groupType === 'strong' ? 'border-emerald-500/20' : groupType === 'weak' ? 'border-red-500/20' : 'border-zinc-500/20';
-    const statusLabel = groupType === 'strong' ? '强宫' : groupType === 'weak' ? '弱宫' : '平宫';
+  // 2. 将数组强制按照紫微斗数标准顺序（命兄夫子...）重排
+  const orderedScores = [...scores].sort((a, b) => {
+    const normalizeName = (name: string) => name.replace('仆役', '交友').replace('宫', '') + '宫';
+    const idxA = STANDARD_ORDER.indexOf(normalizeName(a.palaceName));
+    const idxB = STANDARD_ORDER.indexOf(normalizeName(b.palaceName));
+    return (idxA === -1 ? 99 : idxA) - (idxB === -1 ? 99 : idxB);
+  });
 
-    return (
-      <React.Fragment key={p.palaceName}>
-        <tr 
-          className={`hover:bg-zinc-800/40 transition-all cursor-pointer border-b border-zinc-800/30 ${isExpanded ? 'bg-zinc-800/30' : ''}`}
-          onClick={() => setExpandedRow(isExpanded ? null : p.palaceName)}
-        >
-          <td className="px-4 py-4">
-            <div className="flex flex-col">
-              <span className="text-zinc-100 font-bold text-sm tracking-tight">{p.palaceName}</span>
-              <span className="text-[10px] text-zinc-500 font-mono uppercase">{p.heavenlyStem}{p.earthlyBranch}</span>
+  const activePalace = orderedScores.find(p => p.palaceName === expandedRow);
+  const activeTier = activePalace ? getTier(activePalace.palaceName) : 'neutral';
+
+  return (
+    <div className="p-4 sm:p-6 w-full h-full overflow-auto custom-scrollbar bg-zinc-950 flex flex-col items-center">
+      <div className="mb-6 w-full max-w-4xl">
+        <PatternDashboard patterns={patterns} />
+      </div>
+
+      <div className="mb-6 flex items-center justify-between w-full max-w-4xl">
+        <div className="flex flex-col">
+          <h3 className="text-emerald-400 font-black text-xl sm:text-2xl flex items-center gap-3 tracking-tighter uppercase">
+            <Trophy className="text-emerald-500" size={24} />
+            命格十二宫穿透报告
+          </h3>
+          <p className="text-[10px] text-zinc-500 mt-1 uppercase tracking-[0.4em] font-black">Resonance Analysis System</p>
+        </div>
+      </div>
+      
+      {/* 🚀 极简双排 6x2 固定网格 (高度压缩 50%) */}
+      <div className="w-full max-w-4xl bg-zinc-900/40 border border-zinc-800/60 rounded-2xl p-3 sm:p-4 mb-6 shadow-xl backdrop-blur-md">
+        <div className="grid grid-cols-6 gap-2 sm:gap-3">
+          {orderedScores.map(p => {
+            const tier = getTier(p.palaceName);
+            const isSelected = expandedRow === p.palaceName;
+            
+            // UI 颜色逻辑
+            let colorClasses = '';
+            if (tier === 'strong') {
+              colorClasses = isSelected ? 'bg-emerald-500 text-black border-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20';
+            } else if (tier === 'weak') {
+              colorClasses = isSelected ? 'bg-red-500 text-white border-red-400 shadow-[0_0_10px_rgba(239,68,68,0.5)]' : 'bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20';
+            } else {
+              colorClasses = isSelected ? 'bg-zinc-200 text-black border-zinc-300 shadow-[0_0_10px_rgba(228,228,231,0.5)]' : 'bg-zinc-800/50 text-zinc-300 border-zinc-700 hover:bg-zinc-700/50';
+            }
+
+            return (
+              <button
+                key={p.palaceName}
+                onClick={() => setExpandedRow(isSelected ? null : p.palaceName)}
+                className={`py-2 sm:py-3 px-1 rounded-lg border text-[11px] sm:text-sm font-bold transition-all flex items-center justify-center tracking-widest ${colorClasses}`}
+              >
+                {/* 仅保留宫位名字，极致紧凑 */}
+                {p.palaceName.replace('宫', '')}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 🎯 展开后的宫位详细数据面板 */}
+      {activePalace && (
+        <div className={`w-full max-w-4xl bg-zinc-900/80 border-t-4 rounded-xl shadow-2xl p-5 sm:p-8 animate-in slide-in-from-top-4 fade-in duration-300 ${
+          activeTier === 'strong' ? 'border-emerald-500' : activeTier === 'weak' ? 'border-red-500' : 'border-zinc-500'
+        }`}>
+          
+          <div className="flex justify-between items-center mb-8 pb-4 border-b border-zinc-800">
+            <h2 className="text-2xl font-black text-white tracking-widest">{activePalace.palaceName}</h2>
+            <div className="flex items-baseline gap-2">
+              <span className={`text-3xl font-black font-mono tracking-tighter ${
+                activeTier === 'strong' ? 'text-emerald-400' : activeTier === 'weak' ? 'text-red-400' : 'text-zinc-300'
+              }`}>
+                {activePalace.finalScore.toFixed(1)}
+              </span>
+              <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest">综合算力</span>
             </div>
-          </td>
-          <td className="px-4 py-4">
-            <div className="flex flex-col gap-1">
-              <div className="flex flex-wrap gap-1">
-                {p.baseBreakdowns.slice(0, 3).map((b, i) => (
-                  <span key={i} className="text-[9px] px-1.5 py-0.5 bg-zinc-900 text-zinc-400 rounded-sm border border-zinc-800 font-medium">
-                    {b.starName}
-                  </span>
-                ))}
-                {p.baseBreakdowns.length > 3 && <span className="text-[9px] text-zinc-600 font-bold">+{p.baseBreakdowns.length - 3}</span>}
+          </div>
+
+          <div className="flex flex-col gap-8">
+            
+            {/* 1. 🌟 优先级最高：五维宿命共振解析 */}
+            {(() => {
+              const vec = vCoreVectors[activePalace.palaceName];
+              if (!vec) return null;
+              const activeTexts = getActiveInterpretations(activePalace.palaceName, vec);
+
+              return (
+                <div>
+                  <div className="flex items-center gap-2 text-amber-500/70 mb-4">
+                    <Sparkles size={16} />
+                    <span className="text-[11px] font-black uppercase tracking-[0.2em]">大师级宫位深度解析 (5D Interpretations)</span>
+                  </div>
+                  {activeTexts.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {activeTexts.map((item, idx) => (
+                        <div key={idx} className={`border ${item.border} ${item.bg} rounded-xl p-4 flex flex-col gap-2 hover:brightness-110 transition-all`}>
+                          <div className={`flex items-center gap-1.5 text-xs font-bold ${item.color}`}>
+                            {item.icon} {item.label}
+                          </div>
+                          <p className="text-sm text-zinc-300 leading-relaxed">
+                            {item.text}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="bg-zinc-800/30 rounded-lg p-5 border border-zinc-700/50 text-center">
+                      <p className="text-sm text-zinc-400 leading-relaxed">
+                        该宫位五维能量处于底盘平衡期，未见显著的爆发性红利，亦无致命动荡危机。宜稳扎稳打。
+                      </p>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* 2. 基础星曜算力区 */}
+            <div>
+              <div className="flex items-center gap-2 text-zinc-500 mb-4">
+                <Zap size={14} className="text-emerald-500/50" />
+                <span className="text-[10px] font-black uppercase tracking-[0.2em]">底层星曜算力 (Base Score Breakdown)</span>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-zinc-600 font-mono tracking-tighter uppercase">Base: {p.baseScore > 0 ? `+${p.baseScore}` : p.baseScore}</span>
-                {p.patternScore !== 0 && (
-                  <span className={`text-[10px] font-mono tracking-tighter ${p.patternScore > 0 ? 'text-amber-500/80' : 'text-purple-500/80'}`}>
-                    Pat: {p.patternScore > 0 ? `+${p.patternScore}` : p.patternScore}
-                  </span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {activePalace.baseBreakdowns.length > 0 ? activePalace.baseBreakdowns.map((b, bIdx) => (
+                  <div key={bIdx} className="bg-zinc-950/50 border border-zinc-800/50 rounded-lg p-3 flex justify-between items-center group hover:border-zinc-700 transition-colors">
+                    <div className="flex flex-col">
+                      <span className="text-zinc-200 font-bold text-xs">{b.starName}</span>
+                      <span className="text-[9px] text-zinc-500 uppercase font-medium">{b.reason}</span>
+                    </div>
+                    <span className={`text-xs font-mono font-black ${b.score > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {b.score > 0 ? `+${b.score}` : b.score}
+                    </span>
+                  </div>
+                )) : (
+                  <div className="col-span-full text-center text-xs text-zinc-600 py-4 border border-zinc-800/50 rounded-lg border-dashed">
+                    宫位能量平稳，无显著加减分项
+                  </div>
                 )}
               </div>
             </div>
-          </td>
-          <td className="px-4 py-4">
-            <div className="flex items-baseline gap-1">
-              <span className={`text-2xl font-black font-mono tracking-tighter ${statusColor}`}>
-                {p.finalScore.toFixed(1)}
-              </span>
-              <span className="text-[9px] text-zinc-600 uppercase font-bold tracking-tighter">Index</span>
-            </div>
-          </td>
-          <td className="px-4 py-4">
-            <span className={`px-2 py-1 rounded-md text-[10px] font-bold border ${statusBg} ${statusColor} ${statusBorder} uppercase tracking-widest`}>
-              {statusLabel}
-            </span>
-          </td>
-          <td className="px-4 py-4 text-zinc-600">
-            {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          </td>
-        </tr>
-        {isExpanded && (
-          <tr className={`bg-zinc-900/80 border-l-4 ${groupType === 'strong' ? 'border-emerald-500/50' : groupType === 'weak' ? 'border-red-500/50' : 'border-zinc-500/50'}`}>
-            <td colSpan={5} className="px-6 py-6">
-              <div className="flex flex-col gap-8">
-                
-                {/* 1. 基础星曜算力区 */}
-                <div>
-                  <div className="flex items-center gap-2 text-zinc-500 mb-4">
-                    <Zap size={14} className="text-emerald-500/50" />
-                    <span className="text-[10px] font-black uppercase tracking-[0.2em]">底层星曜算力 (Base Score Breakdown)</span>
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {p.baseBreakdowns.length > 0 ? p.baseBreakdowns.map((b, bIdx) => (
-                      <div key={bIdx} className="bg-zinc-950/50 border border-zinc-800/50 rounded-lg p-3 flex justify-between items-center group hover:border-zinc-700 transition-colors">
-                        <div className="flex flex-col">
-                          <span className="text-zinc-200 font-bold text-xs">{b.starName}</span>
-                          <span className="text-[9px] text-zinc-500 uppercase font-medium">{b.reason}</span>
-                        </div>
-                        <span className={`text-xs font-mono font-black ${b.score > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                          {b.score > 0 ? `+${b.score}` : b.score}
-                        </span>
+
+            {/* 3. 格局加持区 */}
+            {activePalace.patternBreakdowns.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 text-zinc-500 mb-4">
+                  <Award size={14} className="text-purple-500/50" />
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em]">多维格局穿透 (Pattern Buffs)</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {activePalace.patternBreakdowns.map((b, bIdx) => (
+                    <div key={bIdx} className={`border rounded-lg p-3 flex justify-between items-center ${b.score > 0 ? 'bg-amber-950/20 border-amber-500/30' : 'bg-purple-950/20 border-purple-500/30'}`}>
+                      <div className="flex flex-col">
+                        <span className={`font-bold text-xs ${b.score > 0 ? 'text-amber-400' : 'text-purple-400'}`}>{b.reason}</span>
+                        <span className="text-[10px] text-zinc-500 uppercase font-medium mt-0.5">{b.starName}</span>
                       </div>
-                    )) : (
-                      <div className="col-span-full text-center text-xs text-zinc-600 py-4 border border-zinc-800/50 rounded-lg border-dashed">
-                        无星曜算力注入
+                      <span className={`text-sm font-mono font-black ${b.score > 0 ? 'text-amber-400' : 'text-purple-400'}`}>
+                        {b.score > 0 ? `+${b.score}` : b.score}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 4. 三方四正推演公式区 */}
+            <div>
+              <div className="flex items-center gap-2 text-zinc-500 mb-4">
+                <Activity size={14} className="text-blue-500/50" />
+                <span className="text-[10px] font-black uppercase tracking-[0.2em]">三方四正空间矩阵 (Spatial Matrix)</span>
+              </div>
+              <div className="bg-zinc-950/40 rounded-xl p-4 sm:p-6 border border-zinc-800/50 relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-4 opacity-[0.02] pointer-events-none">
+                  <Activity size={120} />
+                </div>
+                
+                <div className="flex flex-col gap-3 sm:gap-4 relative z-10">
+                  {activePalace.formulaDetails.map((f, fIdx) => (
+                    <div key={fIdx} className="flex items-center gap-2 sm:gap-4 group">
+                      <div className="w-20 sm:w-24 flex flex-col shrink-0">
+                        <span className="text-[9px] text-zinc-500 font-black uppercase tracking-tighter">{f.palaceRole}</span>
+                        <span className="text-[11px] sm:text-xs text-zinc-300 font-bold truncate">{f.palaceName}</span>
+                      </div>
+                      <div className="flex-1 h-[1px] bg-zinc-800/50 group-hover:bg-zinc-700 transition-colors"></div>
+                      <div className="flex items-center gap-2 sm:gap-3 font-mono shrink-0">
+                        <span className="text-xs sm:text-sm text-zinc-400">{f.rawScore.toFixed(1)}</span>
+                        <span className="text-[9px] sm:text-[10px] text-zinc-600">×</span>
+                        <span className="text-[9px] sm:text-[10px] text-zinc-500 font-bold">{f.weight.toFixed(1)}</span>
+                        <span className="text-[9px] sm:text-[10px] text-zinc-700">=</span>
+                        <span className="text-xs sm:text-sm text-emerald-400/80 font-black w-8 sm:w-10 text-right">{f.calculatedScore.toFixed(1)}</span>
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {/* 公式终极汇总区 */}
+                  <div className="mt-4 pt-4 border-t border-zinc-800 flex flex-col gap-2">
+                    <div className="flex justify-between items-center text-[10px] text-zinc-500 uppercase tracking-widest font-mono">
+                      <span>Σ 矩阵衰减分 (Matrix)</span>
+                      <span className="text-sm font-bold text-zinc-300">{activePalace.matrixScore.toFixed(1)}</span>
+                    </div>
+                    {activePalace.patternScore !== 0 && (
+                      <div className={`flex justify-between items-center text-[10px] uppercase tracking-widest font-mono ${activePalace.patternScore > 0 ? 'text-amber-500/80' : 'text-purple-500/80'}`}>
+                        <span>+ 核心格局分 (Pattern Buff)</span>
+                        <span className="text-sm font-bold">{activePalace.patternScore > 0 ? '+' : ''}{activePalace.patternScore.toFixed(1)}</span>
                       </div>
                     )}
                   </div>
                 </div>
-
-                {/* 2. 多维格局穿透 */}
-                {p.patternBreakdowns.length > 0 && (
-                  <div>
-                    <div className="flex items-center gap-2 text-zinc-500 mb-4">
-                      <Award size={14} className="text-purple-500/50" />
-                      <span className="text-[10px] font-black uppercase tracking-[0.2em]">多维格局穿透 (Pattern Synergy)</span>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {p.patternBreakdowns.map((b, bIdx) => (
-                        <div key={bIdx} className="bg-purple-900/10 border border-purple-500/20 rounded-lg p-3 flex justify-between items-center">
-                          <div className="flex flex-col">
-                            <span className="text-purple-400 font-bold text-xs">{b.reason}</span>
-                            <span className="text-[9px] text-purple-500/50 uppercase font-medium">{b.starName}</span>
-                          </div>
-                          <span className={`text-xs font-mono font-black ${b.score > 0 ? 'text-purple-400' : 'text-rose-400'}`}>
-                            {b.score > 0 ? `+${b.score}` : b.score}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* 3. 三方四正空间矩阵 */}
-                <div>
-                  <div className="flex items-center gap-2 text-zinc-500 mb-4">
-                    <Activity size={14} className="text-blue-500/50" />
-                    <span className="text-[10px] font-black uppercase tracking-[0.2em]">三方四正空间矩阵 (Spatial Matrix)</span>
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    {p.formulaDetails.map((f, fIdx) => (
-                      <div key={fIdx} className="flex items-center justify-between bg-zinc-950/30 p-2 rounded border border-zinc-800/30">
-                        <span className="text-xs text-zinc-400 w-24">{f.palaceRole}</span>
-                        <span className="text-xs font-bold text-zinc-300 flex-1">{f.palaceName}</span>
-                        <div className="flex items-center gap-3 font-mono text-[10px]">
-                          <span className="text-zinc-500">{f.rawScore.toFixed(1)} × {f.weight}</span>
-                          <span className="text-blue-400 font-bold w-12 text-right">={f.calculatedScore.toFixed(1)}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* 4. 🌟 新增：五维宿命共振解析 (5D Resonance Interpretations) */}
-                {(() => {
-                  const vec = vCoreVectors[p.palaceName];
-                  if (!vec) return null;
-                  const activeTexts = getActiveInterpretations(p.palaceName, vec);
-
-                  return (
-                    <div>
-                      <div className="flex items-center gap-2 text-zinc-500 mb-4">
-                        <Sparkles size={14} className="text-amber-500/50" />
-                        <span className="text-[10px] font-black uppercase tracking-[0.2em]">大师级宫位深度解析 (5D Interpretations)</span>
-                      </div>
-                      {activeTexts.length > 0 ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          {activeTexts.map((item, idx) => (
-                            <div key={idx} className={`border ${item.border} ${item.bg} rounded-xl p-4 flex flex-col gap-2 hover:brightness-110 transition-all`}>
-                              <div className={`flex items-center gap-1.5 text-xs font-bold ${item.color}`}>
-                                {item.icon} {item.label}
-                              </div>
-                              <p className="text-xs text-zinc-300 leading-relaxed">
-                                {item.text}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="bg-zinc-800/30 rounded-lg p-4 border border-zinc-700/50 text-center">
-                          <p className="text-xs text-zinc-400 leading-relaxed">
-                            该宫位五维能量处于底盘平衡期，未见显著的爆发性红利，亦无致命动荡危机。宜稳扎稳打。
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-
               </div>
-            </td>
-          </tr>
-        )}
-      </React.Fragment>
-    );
-  };
-
-  return (
-    <div className="w-full flex flex-col gap-8 animate-in fade-in duration-500">
-      <PatternDashboard patterns={patterns} />
-
-      <div className="flex flex-col bg-zinc-950/80 border border-zinc-800/60 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-xl">
-        <div className="p-5 md:p-6 border-b border-zinc-800/60 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.15)]">
-              <Trophy className="text-emerald-400" size={20} />
             </div>
-            <div className="flex flex-col">
-              <h3 className="text-zinc-100 font-bold text-lg tracking-tight">十二宫综合战力榜</h3>
-              <p className="text-[10px] text-zinc-500 font-mono uppercase tracking-[0.2em] mt-0.5">Palace Power Ranking</p>
-            </div>
+
           </div>
         </div>
-
-        <div className="p-4 md:p-6 flex flex-col gap-8">
-          <section className="flex flex-col gap-4">
-            <div className="flex items-center gap-3 px-2">
-              <Trophy size={18} className="text-emerald-500" />
-              <h4 className="text-emerald-500 font-black uppercase text-xs tracking-[0.2em]">🔥 强宫 (人生核心优势盘)</h4>
-              <div className="h-[1px] flex-1 bg-gradient-to-r from-emerald-500/30 to-transparent ml-4"></div>
-            </div>
-            <div className="bg-zinc-900/40 border border-emerald-500/20 rounded-2xl overflow-hidden shadow-[0_4px_20px_rgba(16,185,129,0.05)]">
-              <table className="w-full text-left text-xs border-collapse">
-                <tbody>{strongPalaces.map(p => renderPalaceRow(p, 'strong'))}</tbody>
-              </table>
-            </div>
-          </section>
-
-          <section className="flex flex-col gap-4">
-            <div className="flex items-center gap-3 px-2">
-              <Minus size={18} className="text-zinc-500" />
-              <h4 className="text-zinc-500 font-black uppercase text-xs tracking-[0.2em]">⚖️ 平宫 (稳定发展领域)</h4>
-              <div className="h-[1px] flex-1 bg-gradient-to-r from-zinc-700/50 to-transparent ml-4"></div>
-            </div>
-            <div className="bg-zinc-900/20 border border-zinc-800/50 rounded-2xl overflow-hidden">
-              <table className="w-full text-left text-xs border-collapse">
-                <tbody>{neutralPalaces.map(p => renderPalaceRow(p, 'neutral'))}</tbody>
-              </table>
-            </div>
-          </section>
-
-          <section className="flex flex-col gap-4">
-            <div className="flex items-center gap-3 px-2">
-              <AlertTriangle size={18} className="text-red-500" />
-              <h4 className="text-red-500 font-black uppercase text-xs tracking-[0.2em]">⚠️ 弱宫 (短板需关注领域)</h4>
-              <div className="h-[1px] flex-1 bg-gradient-to-r from-red-500/30 to-transparent ml-4"></div>
-            </div>
-            <div className="bg-zinc-900/40 border border-red-500/20 rounded-2xl overflow-hidden">
-              <table className="w-full text-left text-xs border-collapse">
-                <tbody>{weakPalaces.map(p => renderPalaceRow(p, 'weak'))}</tbody>
-              </table>
-            </div>
-          </section>
-        </div>
-      </div>
+      )}
+      
+      {/* 底部留白 */}
+      <div className="h-20 w-full"></div>
     </div>
   );
 }
