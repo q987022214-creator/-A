@@ -2,11 +2,9 @@ import React, { useMemo, useState } from 'react';
 import { calculateChartScores, PalaceScore } from '../utils/scoreCalculator';
 import { recognizePatterns } from '../utils/patternRecognizer'; 
 import PatternDashboard from './PatternDashboard';
-// 🌟 引入新的下降箭头图标 TrendingDown
 import { Trophy, Zap, Activity, Award, ShieldAlert, Sparkles, TrendingDown } from 'lucide-react';
 import { astro } from 'iztro';
 import { VCoreEngine, VectorMath, Vector5D } from '../utils/vCoreEngine';
-// 🌟 引入刚刚写好的低分字典 PALACE_LOW_INTERPRETATIONS
 import { PALACE_INTERPRETATIONS, PALACE_LOW_INTERPRETATIONS } from '../data/vCoreInterpretations';
 
 interface PalaceScoreTableProps {
@@ -50,13 +48,22 @@ export default function PalaceScoreTable({ iztroData }: PalaceScoreTableProps) {
   const vCoreVectors = useMemo(() => {
     if (!iztroData) return {};
     try {
-      let clean = typeof iztroData === 'string' ? iztroData.trim() : JSON.stringify(iztroData);
-      if (!clean.startsWith('{')) clean = clean.match(/\{[\s\S]*\}/)?.[0] || '{}';
-      const chartObj = JSON.parse(clean);
-      if (!chartObj?.rawParams) return {};
+      let data = iztroData;
+      if (typeof data === 'string') {
+        let clean = data.trim();
+        if (!clean.startsWith('{')) clean = clean.match(/\{[\s\S]*\}/)?.[0] || '{}';
+        data = JSON.parse(clean);
+      }
       
-      const astrolabe = astro.bySolar(chartObj.rawParams.birthday, chartObj.rawParams.birthTime, chartObj.rawParams.gender, true, 'zh-CN');
-      
+      let astrolabe;
+      if (data.rawParams) {
+        astrolabe = astro.bySolar(data.rawParams.birthday, data.rawParams.birthTime, data.rawParams.gender, true, 'zh-CN');
+      } else if (data.palaces) {
+        astrolabe = data;
+      } else {
+        return {};
+      }
+
       const basePalaces = astrolabe.palaces.map((p: any) => {
         const mutagens: string[] = [];
         const allStars = [...(p.majorStars || []), ...(p.minorStars || []), ...(p.adjectiveStars || [])];
@@ -108,7 +115,6 @@ export default function PalaceScoreTable({ iztroData }: PalaceScoreTableProps) {
     } catch(e) { return {}; }
   }, [iztroData]);
 
-  // 🌟 核心引擎更新：加入极低分 (<0.5) 判定拦截
   const getActiveInterpretations = (palaceName: string, vector: Vector5D | undefined) => {
     if (!vector) return [];
     const cleanName = palaceName.replace(/(本命|大限|流年)/g, '').trim();
@@ -117,30 +123,26 @@ export default function PalaceScoreTable({ iztroData }: PalaceScoreTableProps) {
     ) || "命宫";
     
     const interpretations = PALACE_INTERPRETATIONS[dictKey];
-    const lowInterpretations = PALACE_LOW_INTERPRETATIONS?.[dictKey]; // 引入低分字典
+    const lowInterpretations = PALACE_LOW_INTERPRETATIONS[dictKey];
     
-    const maxVal = Math.max(vector.F, vector.P, vector.E, vector.S, vector.W);
-    const activeThreshold = maxVal >= 1.2 ? 1.2 : maxVal; 
-    const LOW_THRESHOLD = 0.5; // 定义低分红线
-
     const active = [];
     
-    // 🌟 判定高分 (>1.2) - 绿色/金色/蓝色等明亮UI
+    // 高分判定：若维度 >= 1.2
     if (interpretations) {
-      if (vector.F >= activeThreshold && interpretations.F_High) active.push({ label: '财源优势 (F↑)', text: interpretations.F_High, icon: <Sparkles size={14}/>, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' });
-      if (vector.P >= activeThreshold && interpretations.P_High) active.push({ label: '权力掌控 (P↑)', text: interpretations.P_High, icon: <Zap size={14}/>, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' });
-      if (vector.E >= activeThreshold && interpretations.E_High) active.push({ label: '情感羁绊 (E↑)', text: interpretations.E_High, icon: <Activity size={14}/>, color: 'text-fuchsia-400', bg: 'bg-fuchsia-500/10', border: 'border-fuchsia-500/20' });
-      if (vector.S >= activeThreshold && interpretations.S_High) active.push({ label: '稳健底盘 (S↑)', text: interpretations.S_High, icon: <ShieldAlert size={14}/>, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' });
-      if (vector.W >= activeThreshold && interpretations.W_High) active.push({ label: '动荡高危 (W↑)', text: interpretations.W_High, icon: <ShieldAlert size={14}/>, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20' });
+      if (vector.F >= 1.2) active.push({ label: '财源优势 (F↑)', text: interpretations.F_High, icon: <Sparkles size={14}/>, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' });
+      if (vector.P >= 1.2) active.push({ label: '权力掌控 (P↑)', text: interpretations.P_High, icon: <Zap size={14}/>, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' });
+      if (vector.E >= 1.2) active.push({ label: '情感羁绊 (E↑)', text: interpretations.E_High, icon: <Activity size={14}/>, color: 'text-fuchsia-400', bg: 'bg-fuchsia-500/10', border: 'border-fuchsia-500/20' });
+      if (vector.S >= 1.2) active.push({ label: '稳健底盘 (S↑)', text: interpretations.S_High, icon: <ShieldAlert size={14}/>, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' });
+      if (vector.W >= 1.2) active.push({ label: '动荡高危 (W↑)', text: interpretations.W_High, icon: <ShieldAlert size={14}/>, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20' });
     }
 
-    // 🌟 判定低分 (<=0.5) - 灰色暗沉系预警UI
+    // 低分判定：若维度 < 0.5
     if (lowInterpretations) {
-      if (vector.F <= LOW_THRESHOLD && lowInterpretations.F_Low) active.push({ label: '财源收缩 (F↓)', text: lowInterpretations.F_Low, icon: <TrendingDown size={14}/>, color: 'text-zinc-400', bg: 'bg-zinc-900/50', border: 'border-zinc-700/50' });
-      if (vector.P <= LOW_THRESHOLD && lowInterpretations.P_Low) active.push({ label: '权力弱化 (P↓)', text: lowInterpretations.P_Low, icon: <TrendingDown size={14}/>, color: 'text-zinc-400', bg: 'bg-zinc-900/50', border: 'border-zinc-700/50' });
-      if (vector.E <= LOW_THRESHOLD && lowInterpretations.E_Low) active.push({ label: '情感疏离 (E↓)', text: lowInterpretations.E_Low, icon: <TrendingDown size={14}/>, color: 'text-zinc-400', bg: 'bg-zinc-900/50', border: 'border-zinc-700/50' });
-      if (vector.S <= LOW_THRESHOLD && lowInterpretations.S_Low) active.push({ label: '底气不足 (S↓)', text: lowInterpretations.S_Low, icon: <TrendingDown size={14}/>, color: 'text-zinc-400', bg: 'bg-zinc-900/50', border: 'border-zinc-700/50' });
-      if (vector.W <= LOW_THRESHOLD && lowInterpretations.W_Low) active.push({ label: '轨迹固化 (W↓)', text: lowInterpretations.W_Low, icon: <TrendingDown size={14}/>, color: 'text-zinc-400', bg: 'bg-zinc-900/50', border: 'border-zinc-700/50' });
+      if (vector.F < 0.5) active.push({ label: '财源收缩 (F↓)', text: lowInterpretations.F_Low, icon: <TrendingDown size={14}/>, color: 'text-zinc-400', bg: 'bg-zinc-900/50', border: 'border-zinc-700/50' });
+      if (vector.P < 0.5) active.push({ label: '权力弱化 (P↓)', text: lowInterpretations.P_Low, icon: <TrendingDown size={14}/>, color: 'text-zinc-400', bg: 'bg-zinc-900/50', border: 'border-zinc-700/50' });
+      if (vector.E < 0.5) active.push({ label: '情感疏离 (E↓)', text: lowInterpretations.E_Low, icon: <TrendingDown size={14}/>, color: 'text-zinc-400', bg: 'bg-zinc-900/50', border: 'border-zinc-700/50' });
+      if (vector.S < 0.5) active.push({ label: '底气不足 (S↓)', text: lowInterpretations.S_Low, icon: <TrendingDown size={14}/>, color: 'text-zinc-400', bg: 'bg-zinc-900/50', border: 'border-zinc-700/50' });
+      if (vector.W < 0.5) active.push({ label: '轨迹固化 (W↓)', text: lowInterpretations.W_Low, icon: <TrendingDown size={14}/>, color: 'text-zinc-400', bg: 'bg-zinc-900/50', border: 'border-zinc-700/50' });
     }
 
     return active;
@@ -243,43 +245,36 @@ export default function PalaceScoreTable({ iztroData }: PalaceScoreTableProps) {
             </div>
           </div>
 
-          <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-8">
             
-            {/* 1. 🌟 五维宿命共振解析 (高低分混合渲染区) */}
+            {/* 0. 🌟 五维宿命共振解析 (高低分语义预警) */}
             {(() => {
               const vec = vCoreVectors[activePalace.palaceName];
               if (!vec) return null;
               const activeTexts = getActiveInterpretations(activePalace.palaceName, vec);
-
+              if (activeTexts.length === 0) return null;
+              
               return (
-                <div className="bg-zinc-950/50 p-4 rounded-xl border border-zinc-800/50">
-                  <div className="flex items-center gap-2 text-amber-500/70 mb-3">
+                <div>
+                  <div className="flex items-center gap-2 text-cyan-500/70 mb-4">
                     <Sparkles size={14} />
-                    <span className="text-[10px] font-black uppercase tracking-[0.1em]">多维命理大师解读</span>
+                    <span className="text-[10px] font-black uppercase tracking-[0.2em]">五维多维状态解析 (5D Resonance Analysis)</span>
                   </div>
-                  {activeTexts.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-64 overflow-y-auto custom-scrollbar pr-2">
-                      {activeTexts.map((item, idx) => (
-                        <div key={idx} className={`border ${item.border} ${item.bg} rounded-lg p-3 flex flex-col gap-1.5`}>
-                          <div className={`flex items-center gap-1.5 text-xs font-bold ${item.color}`}>
-                            {item.icon} {item.label}
-                          </div>
-                          <p className="text-xs text-zinc-300 leading-relaxed">
-                            {item.text}
-                          </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {activeTexts.map((item, idx) => (
+                      <div key={idx} className={`border ${item.border} ${item.bg} rounded-lg p-3 flex flex-col gap-1.5`}>
+                        <div className={`flex items-center gap-1.5 text-xs font-bold ${item.color}`}>
+                          {item.icon} {item.label}
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="bg-zinc-800/30 rounded-lg p-3 border border-zinc-700/50 text-center">
-                      <p className="text-xs text-zinc-400">该宫位五维能量平稳，未见显著激荡，宜稳扎稳打。</p>
-                    </div>
-                  )}
+                        <p className="text-[11px] text-zinc-300 leading-relaxed">{item.text}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               );
             })()}
 
-            {/* 2. 数据骨架：星曜与格局 */}
+            {/* 1. 数据骨架：星曜与格局 */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <div className="flex items-center gap-2 text-zinc-500 mb-2">
@@ -320,7 +315,7 @@ export default function PalaceScoreTable({ iztroData }: PalaceScoreTableProps) {
               </div>
             </div>
 
-            {/* 3. 三方四正推演公式区 */}
+            {/* 2. 三方四正推演公式区 */}
             <div>
               <div className="flex items-center gap-2 text-zinc-500 mb-2">
                 <Activity size={12} className="text-blue-500/50" />
