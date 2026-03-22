@@ -125,24 +125,26 @@ export default function PalaceScoreTable({ iztroData }: PalaceScoreTableProps) {
     const interpretations = PALACE_INTERPRETATIONS[dictKey];
     const lowInterpretations = PALACE_LOW_INTERPRETATIONS[dictKey];
     
+    const HIGH_THRESHOLD = 1.15; // 稍微下调高分门槛
+    const LOW_THRESHOLD = 0.7;   // 大幅上调低分门槛，对抗融合稀释
     const active = [];
     
-    // 高分判定：若维度 >= 1.2
+    // 高分判定
     if (interpretations) {
-      if (vector.F >= 1.2) active.push({ label: '财源优势 (F↑)', text: interpretations.F_High, icon: <Sparkles size={14}/>, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' });
-      if (vector.P >= 1.2) active.push({ label: '权力掌控 (P↑)', text: interpretations.P_High, icon: <Zap size={14}/>, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' });
-      if (vector.E >= 1.2) active.push({ label: '情感羁绊 (E↑)', text: interpretations.E_High, icon: <Activity size={14}/>, color: 'text-fuchsia-400', bg: 'bg-fuchsia-500/10', border: 'border-fuchsia-500/20' });
-      if (vector.S >= 1.2) active.push({ label: '稳健底盘 (S↑)', text: interpretations.S_High, icon: <ShieldAlert size={14}/>, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' });
-      if (vector.W >= 1.2) active.push({ label: '动荡高危 (W↑)', text: interpretations.W_High, icon: <ShieldAlert size={14}/>, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20' });
+      if (vector.F >= HIGH_THRESHOLD) active.push({ label: '财源优势 (F↑)', text: interpretations.F_High, icon: <Sparkles size={14}/>, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' });
+      if (vector.P >= HIGH_THRESHOLD) active.push({ label: '权力掌控 (P↑)', text: interpretations.P_High, icon: <Zap size={14}/>, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' });
+      if (vector.E >= HIGH_THRESHOLD) active.push({ label: '情感羁绊 (E↑)', text: interpretations.E_High, icon: <Activity size={14}/>, color: 'text-fuchsia-400', bg: 'bg-fuchsia-500/10', border: 'border-fuchsia-500/20' });
+      if (vector.S >= HIGH_THRESHOLD) active.push({ label: '稳健底盘 (S↑)', text: interpretations.S_High, icon: <ShieldAlert size={14}/>, color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' });
+      if (vector.W >= HIGH_THRESHOLD) active.push({ label: '动荡高危 (W↑)', text: interpretations.W_High, icon: <ShieldAlert size={14}/>, color: 'text-rose-400', bg: 'bg-rose-500/10', border: 'border-rose-500/20' });
     }
 
-    // 低分判定：若维度 < 0.5
+    // 低分判定
     if (lowInterpretations) {
-      if (vector.F < 0.5) active.push({ label: '财源收缩 (F↓)', text: lowInterpretations.F_Low, icon: <TrendingDown size={14}/>, color: 'text-zinc-400', bg: 'bg-zinc-900/50', border: 'border-zinc-700/50' });
-      if (vector.P < 0.5) active.push({ label: '权力弱化 (P↓)', text: lowInterpretations.P_Low, icon: <TrendingDown size={14}/>, color: 'text-zinc-400', bg: 'bg-zinc-900/50', border: 'border-zinc-700/50' });
-      if (vector.E < 0.5) active.push({ label: '情感疏离 (E↓)', text: lowInterpretations.E_Low, icon: <TrendingDown size={14}/>, color: 'text-zinc-400', bg: 'bg-zinc-900/50', border: 'border-zinc-700/50' });
-      if (vector.S < 0.5) active.push({ label: '底气不足 (S↓)', text: lowInterpretations.S_Low, icon: <TrendingDown size={14}/>, color: 'text-zinc-400', bg: 'bg-zinc-900/50', border: 'border-zinc-700/50' });
-      if (vector.W < 0.5) active.push({ label: '轨迹固化 (W↓)', text: lowInterpretations.W_Low, icon: <TrendingDown size={14}/>, color: 'text-zinc-400', bg: 'bg-zinc-900/50', border: 'border-zinc-700/50' });
+      if (vector.F < LOW_THRESHOLD) active.push({ label: '财源收缩 (F↓)', text: lowInterpretations.F_Low, icon: <TrendingDown size={14}/>, color: 'text-zinc-400', bg: 'bg-zinc-900/50', border: 'border-zinc-700/50' });
+      if (vector.P < LOW_THRESHOLD) active.push({ label: '权力弱化 (P↓)', text: lowInterpretations.P_Low, icon: <TrendingDown size={14}/>, color: 'text-zinc-400', bg: 'bg-zinc-900/50', border: 'border-zinc-700/50' });
+      if (vector.E < LOW_THRESHOLD) active.push({ label: '情感疏离 (E↓)', text: lowInterpretations.E_Low, icon: <TrendingDown size={14}/>, color: 'text-zinc-400', bg: 'bg-zinc-900/50', border: 'border-zinc-700/50' });
+      if (vector.S < LOW_THRESHOLD) active.push({ label: '底气不足 (S↓)', text: lowInterpretations.S_Low, icon: <TrendingDown size={14}/>, color: 'text-zinc-400', bg: 'bg-zinc-900/50', border: 'border-zinc-700/50' });
+      if (vector.W < LOW_THRESHOLD) active.push({ label: '轨迹固化 (W↓)', text: lowInterpretations.W_Low, icon: <TrendingDown size={14}/>, color: 'text-zinc-400', bg: 'bg-zinc-900/50', border: 'border-zinc-700/50' });
     }
 
     return active;
@@ -252,7 +254,6 @@ export default function PalaceScoreTable({ iztroData }: PalaceScoreTableProps) {
               const vec = vCoreVectors[activePalace.palaceName];
               if (!vec) return null;
               const activeTexts = getActiveInterpretations(activePalace.palaceName, vec);
-              if (activeTexts.length === 0) return null;
               
               return (
                 <div>
@@ -260,16 +261,29 @@ export default function PalaceScoreTable({ iztroData }: PalaceScoreTableProps) {
                     <Sparkles size={14} />
                     <span className="text-[10px] font-black uppercase tracking-[0.2em]">五维多维状态解析 (5D Resonance Analysis)</span>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {activeTexts.map((item, idx) => (
-                      <div key={idx} className={`border ${item.border} ${item.bg} rounded-lg p-3 flex flex-col gap-1.5`}>
-                        <div className={`flex items-center gap-1.5 text-xs font-bold ${item.color}`}>
-                          {item.icon} {item.label}
+                  {activeTexts.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {activeTexts.map((item, idx) => (
+                        <div key={idx} className={`border ${item.border} ${item.bg} rounded-lg p-3 flex flex-col gap-1.5`}>
+                          <div className={`flex items-center gap-1.5 text-xs font-bold ${item.color}`}>
+                            {item.icon} {item.label}
+                          </div>
+                          <p className="text-[11px] text-zinc-300 leading-relaxed">{item.text}</p>
                         </div>
-                        <p className="text-[11px] text-zinc-300 leading-relaxed">{item.text}</p>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="bg-zinc-900/50 rounded-lg p-3 border border-zinc-800/50 flex flex-col items-center justify-center gap-2">
+                      <p className="text-xs text-zinc-500">该宫位五维能量在空间融合后趋于平稳，未击穿警报阈值。</p>
+                      <div className="flex gap-3 text-[10px] font-mono font-bold">
+                        <span className="text-emerald-500/70">F: {vec.F.toFixed(2)}</span>
+                        <span className="text-amber-500/70">P: {vec.P.toFixed(2)}</span>
+                        <span className="text-fuchsia-500/70">E: {vec.E.toFixed(2)}</span>
+                        <span className="text-blue-500/70">S: {vec.S.toFixed(2)}</span>
+                        <span className="text-rose-500/70">W: {vec.W.toFixed(2)}</span>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  )}
                 </div>
               );
             })()}
