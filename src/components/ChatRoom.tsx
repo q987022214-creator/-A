@@ -403,8 +403,16 @@ export default function ChatRoom() {
         };
 
         // 🚀 计算大限命宫 5D 向量
-        const decadeLifePalace = (horoscope as any).palaces.find((p: any) => p.earthlyBranch === d.earthlyBranch);
-        const oppDecadePalace = (horoscope as any).palaces.find((p: any) => p.earthlyBranch === getOppositeBranch(d.earthlyBranch));
+        const baseDecadeLifePalace = astrolabe.palaces.find((p: any) => p.earthlyBranch === d.earthlyBranch);
+        const baseOppDecadePalace = astrolabe.palaces.find((p: any) => p.earthlyBranch === getOppositeBranch(d.earthlyBranch));
+        
+        const decadeLifePalace = baseDecadeLifePalace ? {
+          ...baseDecadeLifePalace,
+          minorStars: [...(baseDecadeLifePalace.minorStars || []), ...(horoscope.decadal?.stars || [])]
+        } : undefined;
+        
+        const oppDecadePalace = baseOppDecadePalace;
+
         if (decadeLifePalace) {
           const dContext = mapToPalaceContext(decadeLifePalace);
           const oppContext = oppDecadePalace ? mapToPalaceContext(oppDecadePalace) : undefined;
@@ -426,8 +434,15 @@ export default function ChatRoom() {
           focusTitle = `${targetDate.getFullYear()}年 流年`;
 
           // 🚀 计算流年命宫 5D 向量 (含时空轴演化)
-          const yearLifePalace = (horoscope as any).palaces.find((p: any) => p.earthlyBranch === y.earthlyBranch);
-          const oppYearPalace = (horoscope as any).palaces.find((p: any) => p.earthlyBranch === getOppositeBranch(y.earthlyBranch));
+          const baseYearLifePalace = astrolabe.palaces.find((p: any) => p.earthlyBranch === y.earthlyBranch);
+          const baseOppYearPalace = astrolabe.palaces.find((p: any) => p.earthlyBranch === getOppositeBranch(y.earthlyBranch));
+          
+          const yearLifePalace = baseYearLifePalace ? {
+            ...baseYearLifePalace,
+            minorStars: [...(baseYearLifePalace.minorStars || []), ...(horoscope.yearly?.stars || [])]
+          } : undefined;
+          
+          const oppYearPalace = baseOppYearPalace;
           
           const natalLifePalace = astrolabe.palaces.find(p => p.earthlyBranch === y.earthlyBranch);
           const oppNatalPalace = astrolabe.palaces.find(p => p.earthlyBranch === getOppositeBranch(y.earthlyBranch));
@@ -464,6 +479,9 @@ export default function ChatRoom() {
 
     const displayContent = `🔮 发起运限推演\n▶ 目标时空：${res.focusTitle}\n▶ 模式：全息叠影维度展开`;
     const promptToAI = `[系统指令：运限精准推算]\n当前用户希望推算的时空节点为：${res.focusTitle}。请基于附加的全息压缩数据包，直接读取【宫位身份】寻找叠宫，重点分析该运限吉凶。`;
+    
+    // The issue is that handleSendMessage expects the payload as the third argument.
+    // Let's make sure we are passing it correctly and that the streamChat function is triggered.
     await handleSendMessage(promptToAI, displayContent, res.payloadStr);
   };
 

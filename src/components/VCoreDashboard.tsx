@@ -8,12 +8,17 @@ import {
   Cpu, BookOpen, AlertTriangle, X, TrendingUp, BarChart3, ChevronRight, ChevronLeft
 } from 'lucide-react';
 import { astro } from 'iztro';
-import { VCoreEngine, VectorMath, PalaceContext, Vector5D } from '../utils/vCoreEngine';
+import { VCoreEngine, VectorMath, PalaceContext, Vector5D, DecadeData, YearlyTrend } from '../utils/vCoreEngine';
 import { VCoreInterpreter } from '../utils/vCoreInterpreter';
 import { SEMANTIC_MAPPINGS } from '../utils/vCoreData';
 import { calculatePalaceEfficiencyIndex, calculateDecadeGlobalScore, getScoreColorTier } from '../utils/vCoreVisualizer';
 import { VCoreTrendChart } from './VCoreTrendChart';
 import { VCoreBottomSheet, BottomSheetData } from './VCoreBottomSheet';
+import { SIHUA_MAP, getDynamicStarsLocations } from '../utils/dynamicScoreCalculator';
+import { STEM_MUTAGENS } from '../utils/scoreCalculator';
+
+const STEMS = ["甲", "乙", "丙", "丁", "戊", "己", "庚", "辛", "壬", "癸"];
+const BRANCHES = ["子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥"];
 
 interface Props {
   iztroData: string | null;
@@ -73,18 +78,23 @@ export default function VCoreDashboard({ iztroData, onAskAI }: Props) {
       });
 
       // 计算单宫向量的方法 (复用逻辑)
-      const calculatePalaceVector = (palaces: any[], idx: number) => {
+      const calculatePalaceVector = (palaces: any[], idx: number, dynamicMutagens?: string[]) => {
         const oppIdx = (idx + 6) % 12;
         const tri1Idx = (idx + 4) % 12;
         const tri2Idx = (idx + 8) % 12;
         const prevIdx = (idx + 11) % 12;
         const nextIdx = (idx + 1) % 12;
 
-        const { vector: baseVec, isEmpty } = VCoreEngine.extractBaseVector(palaces[idx].ctx, palaces[oppIdx].ctx);
-        const afflictedVec = VCoreEngine.applyAfflictions(baseVec, palaces[idx].ctx);
-        const transformedVec = VCoreEngine.applyTransforms(afflictedVec, palaces[idx].ctx, isEmpty);
+        const ctx = { ...palaces[idx].ctx };
+        if (dynamicMutagens) {
+          ctx.mutagens = [...ctx.mutagens, ...dynamicMutagens];
+        }
+
+        const { vector: baseVec, isEmpty } = VCoreEngine.extractBaseVector(ctx, palaces[oppIdx].ctx);
+        const afflictedVec = VCoreEngine.applyAfflictions(baseVec, ctx);
+        const transformedVec = VCoreEngine.applyTransforms(afflictedVec, ctx, isEmpty);
         
-        const oppBase = VCoreEngine.extractBaseVector(palaces[oppIdx].ctx, palaces[idx].ctx).vector;
+        const oppBase = VCoreEngine.extractBaseVector(palaces[oppIdx].ctx, ctx).vector;
         const tri1Base = VCoreEngine.extractBaseVector(palaces[tri1Idx].ctx, palaces[(tri1Idx+6)%12].ctx).vector;
         const tri2Base = VCoreEngine.extractBaseVector(palaces[tri2Idx].ctx, palaces[(tri2Idx+6)%12].ctx).vector;
         
@@ -97,9 +107,9 @@ export default function VCoreDashboard({ iztroData, onAskAI }: Props) {
         });
 
         const { vector: finalVec, tags } = VCoreEngine.evaluateSpatialPattern(
-          palaces[idx].ctx, palaces[oppIdx].ctx, palaces[tri1Idx].ctx, palaces[tri2Idx].ctx, palaces[prevIdx].ctx, palaces[nextIdx].ctx, fusedVec
+          ctx, palaces[oppIdx].ctx, palaces[tri1Idx].ctx, palaces[tri2Idx].ctx, palaces[prevIdx].ctx, palaces[nextIdx].ctx, fusedVec
         );
-        return { finalVec, tags, baseVec };
+        return { finalVec, tags, baseVec, ctx };
       };
 
       // 1. 计算本命 12 宫全量数据
@@ -132,51 +142,109 @@ export default function VCoreDashboard({ iztroData, onAskAI }: Props) {
         // 找到大限命宫在原局的索引
         const startIdx = basePalaces.findIndex(p => p.branch === d.earthlyBranch);
         
-        // 大限 12 宫索引映射 (大限命、财、官、福)
-        const dMingIdx = startIdx;
-        const dCaiIdx = (startIdx + 8) % 12; // 财帛宫是命宫逆数第5位，即索引 +8
-        const dGuanIdx = (startIdx + 4) % 12; // 官禄宫是命宫顺数第5位，即索引 +4
-        const dFuIdx = (startIdx + 10) % 12; // 福德宫是命宫逆数第3位，即索引 +10
+        // 大限四化
+        const dStem = d.palaceStem;
+        const dSihua = SIHUA_MAP[dStem] || [];
 
-        const dMingVec = calculatePalaceVector(basePalaces, dMingIdx).finalVec;
-        const dCaiVec = calculatePalaceVector(basePalaces, dCaiIdx).finalVec;
-        const dGuanVec = calculatePalaceVector(basePalaces, dGuanIdx).finalVec;
-        const dFuVec = calculatePalaceVector(basePalaces, dFuIdx).finalVec;
-
-        const dgs = calculateDecadeGlobalScore(dMingVec, dCaiVec, dGuanVec, dFuVec);
-        
-        // 3. 计算该大限下 12 宫的 PEI (先计算，供流年使用)
+        // 计算该大限下 12 宫的 PEI
         const decadePalacesPEI = basePalaces.map((_, pIdx) => {
           // 大限宫位名映射
           const names = ["命宫", "父母宫", "福德宫", "田宅宫", "官禄宫", "交友宫", "迁移宫", "疾厄宫", "财帛宫", "子女宫", "夫妻宫", "兄弟宫"];
           const relativeIdx = (pIdx - startIdx + 12) % 12;
           const dPalaceName = names[relativeIdx];
-          const vec = calculatePalaceVector(basePalaces, pIdx).finalVec;
+          
+          // 提取该宫位在大限下的四化
+          const dMutagens: string[] = [];
+          const targetPalace = basePalaces[pIdx];
+          targetPalace.ctx.mainStars.forEach(s => {
+            const mIdx = dSihua.indexOf(s);
+            if (mIdx !== -1) dMutagens.push(['禄', '权', '科', '忌'][mIdx]);
+          });
+
+          const natalResult = calculatePalaceVector(basePalaces, pIdx);
+          const dResult = calculatePalaceVector(basePalaces, pIdx, dMutagens);
+          
+          // 使用 deduceTimeAxis 计算动态差值
+          const { tDelta } = VCoreEngine.deduceTimeAxis(natalResult.finalVec, natalResult.ctx, dResult.finalVec, dResult.ctx);
+
           return {
             name: dPalaceName,
-            score: calculatePalaceEfficiencyIndex(dPalaceName, vec),
-            vector: vec
+            score: calculatePalaceEfficiencyIndex(dPalaceName, dResult.finalVec),
+            vector: dResult.finalVec, // 使用绝对向量，解决“一致性”问题
+            tDelta: tDelta, // 保留差值供参考
+            finalVec: dResult.finalVec 
           };
         }).sort((a, b) => b.score - a.score);
 
+        // 大限命、财、官、福
+        const dMingVec = decadePalacesPEI.find(p => p.name === '命宫')?.finalVec || { F: 1, P: 1, E: 1, S: 1, W: 1 };
+        const dCaiVec = decadePalacesPEI.find(p => p.name === '财帛宫')?.finalVec || { F: 1, P: 1, E: 1, S: 1, W: 1 };
+        const dGuanVec = decadePalacesPEI.find(p => p.name === '官禄宫')?.finalVec || { F: 1, P: 1, E: 1, S: 1, W: 1 };
+        const dFuVec = decadePalacesPEI.find(p => p.name === '福德宫')?.finalVec || { F: 1, P: 1, E: 1, S: 1, W: 1 };
+
+        const dgs = calculateDecadeGlobalScore(dMingVec, dCaiVec, dGuanVec, dFuVec);
+
         // 4. 计算该大限下的 10 个流年趋势 (YGS)
+        const birthYear = astrolabe.rawDates.lunarDate.lunarYear;
+        const bStemIdx = (birthYear - 4) % 10;
+        const bBranchIdx = (birthYear - 4) % 12;
+
         const yearlyTrends = Array.from({ length: 10 }).map((_, yIdx) => {
           const age = d.range[0] + yIdx;
-          const noise = (Math.sin(age * 0.5) * 0.15) + (Math.cos(age * 0.3) * 0.05);
-          const ygs = Number(Math.max(0.1, Math.min(1.5, dgs + noise)).toFixed(2));
+          const year = birthYear + age - 1;
+          const yStem = STEMS[(bStemIdx + age - 1) % 10];
+          const yBranch = BRANCHES[(bBranchIdx + age - 1) % 12];
+          const ySihua = SIHUA_MAP[yStem] || [];
           
-          // 增强：为流年也生成宫位数据，模拟流年宫位的动态变化
-          const yearlyPalaces = decadePalacesPEI.map(p => {
-            const pNoise = (Math.random() - 0.5) * 0.1;
-            const newScore = Number(Math.max(0.1, Math.min(1.5, p.score + pNoise)).toFixed(2));
-            return {
-              ...p,
-              score: newScore
-            };
+          // 流年命宫位置
+          const yLifeIdx = basePalaces.findIndex(p => p.branch === yBranch);
+
+          // 为流年生成真实的宫位数据
+          const yearlyPalaces = basePalaces.map((_, pIdx) => {
+             const names = ["命宫", "父母宫", "福德宫", "田宅宫", "官禄宫", "交友宫", "迁移宫", "疾厄宫", "财帛宫", "子女宫", "夫妻宫", "兄弟宫"];
+             const relativeIdx = (pIdx - yLifeIdx + 12) % 12;
+             const yPalaceName = names[relativeIdx];
+
+             // 叠加：大限四化 + 流年四化
+             const dyMutagens: string[] = [];
+             const targetPalace = basePalaces[pIdx];
+             
+             // 大限四化
+             targetPalace.ctx.mainStars.forEach(s => {
+               const mIdx = dSihua.indexOf(s);
+               if (mIdx !== -1) dyMutagens.push(['禄', '权', '科', '忌'][mIdx]);
+             });
+             
+             // 流年四化
+             targetPalace.ctx.mainStars.forEach(s => {
+               const mIdx = ySihua.indexOf(s);
+               if (mIdx !== -1) dyMutagens.push(['禄', '权', '科', '忌'][mIdx]);
+             });
+
+             const natalResult = calculatePalaceVector(basePalaces, pIdx);
+             const yResult = calculatePalaceVector(basePalaces, pIdx, dyMutagens);
+             
+             const { tDelta } = VCoreEngine.deduceTimeAxis(natalResult.finalVec, natalResult.ctx, yResult.finalVec, yResult.ctx);
+
+             return {
+               name: yPalaceName,
+               score: calculatePalaceEfficiencyIndex(yPalaceName, yResult.finalVec),
+               vector: yResult.finalVec, // 使用绝对向量，解决“一致性”问题
+               tDelta: tDelta,
+               finalVec: yResult.finalVec
+             };
           }).sort((a, b) => b.score - a.score);
+
+          // 计算流年综合分 YGS
+          const yMingVec = yearlyPalaces.find(p => p.name === '命宫')?.finalVec || { F: 1, P: 1, E: 1, S: 1, W: 1 };
+          const yCaiVec = yearlyPalaces.find(p => p.name === '财帛宫')?.finalVec || { F: 1, P: 1, E: 1, S: 1, W: 1 };
+          const yGuanVec = yearlyPalaces.find(p => p.name === '官禄宫')?.finalVec || { F: 1, P: 1, E: 1, S: 1, W: 1 };
+          const yFuVec = yearlyPalaces.find(p => p.name === '福德宫')?.finalVec || { F: 1, P: 1, E: 1, S: 1, W: 1 };
+          const ygs = calculateDecadeGlobalScore(yMingVec, yCaiVec, yGuanVec, yFuVec);
 
           return {
             age,
+            year,
             ygs,
             label: `${age}岁`,
             palaces: yearlyPalaces
@@ -277,7 +345,7 @@ export default function VCoreDashboard({ iztroData, onAskAI }: Props) {
           setSheetData({
             title: `${decadeRange}岁大限 · ${palace.name}`,
             score: palace.score,
-            vector: palace.vector
+            vector: palace.finalVec
           });
         }} 
       />

@@ -23,6 +23,7 @@ export interface DecadeData {
 
 export interface YearlyTrend {
   age: number;
+  year?: number;
   ygs: number;
   label: string;
   palaces: any[];

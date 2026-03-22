@@ -43,8 +43,8 @@ export const VCoreTrendChart: React.FC<Props> = ({ data, onPalaceClick }) => {
     return currentArray.map((item: any, i: number) => {
       const score = getScore(item);
       const x = ((i + 0.5) / currentArray.length) * 1000;
-      // Map score 0.1~1.5 to Y 20~-30 (向上平移 40%)
-      const y = 20 - (Math.min(score, 1.5) / 1.5) * 50;
+      // Map score 0.1~1.5 to Y 50~0 (shifted up by 10% from original 60~10)
+      const y = 50 - (Math.min(score, 1.5) / 1.5) * 50;
       return `${x},${y}`;
     }).join(' ');
   }, [currentArray, getScore]);
@@ -109,7 +109,7 @@ export const VCoreTrendChart: React.FC<Props> = ({ data, onPalaceClick }) => {
           {currentArray.map((item: any, idx: number) => {
             const score = getScore(item);
             const label = isDecadeMode ? item.range : `${item.age}岁`;
-            const subLabel = isDecadeMode ? `${item.stem}${item.branch}限` : `年`;
+            const subLabel = isDecadeMode ? `${item.stem}${item.branch}限` : (item.year ? `${item.year}年` : `年`);
             
             const isPositive = score >= 1.0;
             
@@ -117,8 +117,8 @@ export const VCoreTrendChart: React.FC<Props> = ({ data, onPalaceClick }) => {
             const barHeight = Math.max(2, (Math.min(score, 1.5) / 1.5) * 40); 
             const isSelected = selectedIdx === idx;
             
-            // 折线图圆点 Y 轴位置
-            const lineY = 60 - (Math.min(score, 1.5) / 1.5) * 50; 
+            // 折线图圆点 Y 轴位置 (shifted up by 10% from original 60~10)
+            const lineY = 50 - (Math.min(score, 1.5) / 1.5) * 50; 
             
             return (
               <div key={idx} onClick={() => setSelectedIdx(isSelected ? null : idx)} className="relative flex flex-col items-center w-[8%] h-full group cursor-pointer pointer-events-auto">
@@ -126,8 +126,8 @@ export const VCoreTrendChart: React.FC<Props> = ({ data, onPalaceClick }) => {
                 {/* 交互高亮底色 */}
                 <div className={`absolute inset-0 w-full h-full rounded transition-colors z-0 ${isSelected ? 'bg-zinc-800/30' : 'hover:bg-zinc-800/20'}`}></div>
 
-                {/* 🟢 折线图圆点 (z-30) - 动态颜色 */}
-                <div className={`absolute w-2.5 h-2.5 bg-zinc-900 border-2 ${isPositive ? 'border-emerald-500' : 'border-rose-500'} rounded-full z-30 transition-transform shadow-md ${isSelected ? 'scale-125' : 'group-hover:scale-125'}`} style={{ top: `calc(${lineY}% - 5px)` }}></div>
+                {/* 🟢 折线图圆点 (z-30) - 统一大小，不再随选中放大 */}
+                <div className={`absolute w-2.5 h-2.5 bg-zinc-900 border-2 ${isPositive ? 'border-emerald-500' : 'border-rose-500'} rounded-full z-30 transition-transform shadow-md`} style={{ top: `calc(${lineY}% - 5px)` }}></div>
 
                 {/* 🎯 探查流年按钮 (精简版) */}
                 {isDecadeMode && isSelected && (
@@ -167,7 +167,7 @@ export const VCoreTrendChart: React.FC<Props> = ({ data, onPalaceClick }) => {
           <div className="flex justify-between items-center mb-3 bg-zinc-900/50 p-2 rounded-lg border border-zinc-800/50">
             <h4 className="text-zinc-200 font-bold text-sm flex items-center gap-2">
               <span className="bg-zinc-900 px-2 py-0.5 rounded text-xs border border-zinc-700 flex items-center gap-1">
-                📅 {isDecadeMode ? (activeDetail as DecadeData).range : `${(activeDetail as YearlyTrend).age}岁`} {isDecadeMode ? `${(activeDetail as DecadeData).stem}${(activeDetail as DecadeData).branch}限` : `年`}
+                📅 {isDecadeMode ? (activeDetail as DecadeData).range : `${(activeDetail as YearlyTrend).age}岁 (${(activeDetail as YearlyTrend).year}年)`} {isDecadeMode ? `${(activeDetail as DecadeData).stem}${(activeDetail as DecadeData).branch}限` : `年`}
               </span>
               {selectedTarget === 'global' ? (isDecadeMode ? '大限宫位效能' : '流年宫位效能') : `${selectedTarget} 效能`}
             </h4>
@@ -176,26 +176,32 @@ export const VCoreTrendChart: React.FC<Props> = ({ data, onPalaceClick }) => {
             </div>
           </div>
  
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-            {activeDetail.palaces.map((p: any, idx: number) => {
+          {/* 🚀 极简双排 6x2 固定网格 (极致压缩版) */}
+          <div className="grid grid-cols-6 gap-1.5">
+            {[
+              "命宫", "兄弟", "夫妻", "子女", "财帛", "疾厄", 
+              "迁移", "交友", "官禄", "田宅", "福德", "父母"
+            ].map((shortName) => {
+              const fullName = shortName === "命宫" ? "命宫" : shortName + "宫";
+              const fallbackName = fullName === "交友宫" ? "仆役宫" : fullName;
+              const p = activeDetail.palaces.find((pal: any) => pal.name === fullName || pal.name === fallbackName) || { name: shortName, score: 1.0 };
+              
               const isPositive = p.score >= 1.0;
+              const isSelected = selectedTarget === p.name;
+
               return (
                 <div 
-                  key={idx} 
-                  className={`group flex justify-between items-center bg-zinc-900/30 hover:bg-zinc-800/80 border ${selectedTarget === p.name ? 'border-indigo-500/50 bg-indigo-900/20' : 'border-zinc-800/50 hover:border-zinc-700'} px-2 py-0.5 rounded cursor-pointer transition-all`}
+                  key={shortName} 
+                  className={`group flex items-center justify-center rounded-md border transition-all cursor-pointer py-1.5 px-0.5 text-[11px] font-bold tracking-widest ${
+                    isSelected 
+                      ? 'bg-indigo-500 text-white border-indigo-400 shadow-[0_0_8px_rgba(99,102,241,0.4)]' 
+                      : isPositive 
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20' 
+                        : 'bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-rose-500/20'
+                  }`}
                   onClick={() => onPalaceClick && onPalaceClick(p, isDecadeMode ? (activeDetail as DecadeData).range : `${(activeDetail as YearlyTrend).age}岁`)}
                 >
-                  <div className="flex flex-col">
-                    <span className="text-zinc-300 text-xs font-medium">{p.name}</span>
-                    {p.vector && (
-                      <span className="text-[8px] text-zinc-500 font-mono mt-0.5">
-                        F{p.vector.F} P{p.vector.P} E{p.vector.E} S{p.vector.S} W{p.vector.W}
-                      </span>
-                    )}
-                  </div>
-                  <div className={`text-xs font-mono font-bold ${isPositive ? 'text-emerald-500' : 'text-rose-500'}`}>
-                    {p.score.toFixed(2)}
-                  </div>
+                  {shortName}
                 </div>
               );
             })}
